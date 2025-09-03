@@ -1,0 +1,280 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Labirent Oyunu</title>
+  <style>
+    :root{
+      --bg:#0b1220; --panel:#0f1724; --ink:#e6eef6; --accent:#00d4ff; --muted:#93a1b1;
+      --goal:#66ff99; --player:#ffd166; --wall:#263042;
+    }
+    html,body{height:100%;margin:0;background:radial-gradient(1200px 800px at 20% -10%,#13203a,transparent),
+                                   radial-gradient(1000px 600px at 120% 10%,#0e1a2f,transparent),var(--bg);
+      color:var(--ink);font-family:Inter,system-ui,Segoe UI,Roboto,Arial;
+    }
+    .wrap{max-width:980px;margin:0 auto;padding:16px;display:grid;gap:14px}
+    header{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+    h1{font-size:20px;margin:0;color:#dce7ff;letter-spacing:.3px}
+    .controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    .controls > *{background:var(--panel);border:1px solid #1b2436;color:var(--ink);border-radius:12px;padding:8px 10px}
+    select,button{cursor:pointer}
+    button.primary{background:linear-gradient(180deg,#12b7ff,#0aa3e6);border-color:#0a98d6;color:#032030;font-weight:600}
+    #hud{display:flex;gap:14px;align-items:center;color:var(--muted)}
+    .board{background:var(--panel);border:1px solid #19243a;border-radius:16px;box-shadow:0 10px 30px rgba(0,0,0,.35);padding:12px}
+    canvas{display:block;max-width:100%;height:auto;border-radius:12px;background:#0b1526}
+    .dpad{display:grid;grid-template-columns:48px 48px 48px;grid-template-rows:48px 48px 48px;gap:6px;margin:6px auto 0}
+    .dpad button{width:48px;height:48px;border-radius:12px;border:1px solid #1b2436;background:#132033;color:#cfe6ff;font-weight:700}
+    .dpad button:active{transform:translateY(1px)}
+    .note{color:var(--muted);font-size:13px}
+    a{color:#8dd3ff}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>Labirent Oyunu</h1>
+      <div class="controls">
+        <label>Boyut
+          <select id="size">
+            <option value="15">15×15</option>
+            <option value="21" selected>21×21</option>
+            <option value="31">31×31</option>
+          </select>
+        </label>
+        <button id="new" class="primary">Yeni Labirent</button>
+        <div id="hud">
+          <span>⏱️ <b id="time">0.0</b>s</span>
+          <span>↩︎ Hamle: <b id="moves">0</b></span>
+        </div>
+      </div>
+    </header>
+
+    <div class="board">
+      <canvas id="cv" width="672" height="672"></canvas>
+    </div>
+
+    <div class="dpad" aria-label="yön tuşları">
+      <div></div>
+      <button data-dir="up">▲</button>
+      <div></div>
+      <button data-dir="left">◀</button>
+      <div></div>
+      <button data-dir="right">▶</button>
+      <div></div>
+      <button data-dir="down">▼</button>
+      <div></div>
+    </div>
+
+    <p class="note">Kontroller: Ok tuşları veya WASD. Mobil için yön düğmelerini kullan. Hedef yeşil kare.</p>
+  </div>
+
+<script>
+(function(){
+  const cv = document.getElementById('cv');
+  const ctx = cv.getContext('2d');
+  const movesEl = document.getElementById('moves');
+  const timeEl = document.getElementById('time');
+  const sizeSel = document.getElementById('size');
+  const newBtn = document.getElementById('new');
+
+  let rows = 21, cols = 21; // tek sayı olsun
+  let cell = Math.floor((Math.min(cv.width, cv.height)-2)/rows);
+  let maze, player, goal, moves, startTime, timerId;
+
+  function makeGrid(r,c){
+    const grid=[];
+    for(let y=0;y<r;y++){
+      const row=[]; grid.push(row);
+      for(let x=0;x<c;x++) row.push({x,y, w:{n:1,e:1,s:1,w:1}, v:0});
+    }
+    return grid;
+  }
+
+  function neighbors(g, x, y){
+    const list=[]; const r=g.length, c=g[0].length;
+    if(y>0 && !g[y-1][x].v) list.push([x,y-1,'n']);
+    if(x<c-1 && !g[y][x+1].v) list.push([x+1,y,'e']);
+    if(y<r-1 && !g[y+1][x].v) list.push([x,y+1,'s']);
+    if(x>0 && !g[y][x-1].v) list.push([x-1,y,'w']);
+    return list;
+  }
+
+  function carve(a,b,dir){
+    if(dir==='n'){ a.w.n=0; b.w.s=0; }
+    if(dir==='e'){ a.w.e=0; b.w.w=0; }
+    if(dir==='s'){ a.w.s=0; b.w.n=0; }
+    if(dir==='w'){ a.w.w=0; b.w.e=0; }
+  }
+
+  function shuffle(arr){ for(let i=arr.length-1;i>0;i--){const j=(Math.random()* (i+1))|0; [arr[i],arr[j]]=[arr[j],arr[i]];} return arr; }
+
+  function generate(r,c){
+    const g = makeGrid(r,c);
+    const st = g[0][0]; st.v=1; const stack=[st];
+    while(stack.length){
+      const cur = stack[stack.length-1];
+      const opts = shuffle(neighbors(g, cur.x, cur.y));
+      const next = opts.find(([nx,ny])=>true);
+      if(!next){ stack.pop(); continue; }
+      const [nx,ny,dir] = next;
+      const to = g[ny][nx];
+      to.v=1; carve(cur,to,dir); stack.push(to);
+    }
+    return g;
+  }
+
+  function reset(){
+    rows = cols = parseInt(sizeSel.value,10);
+    cell = Math.floor((Math.min(cv.width, cv.height)-2)/rows);
+    maze = generate(rows,cols);
+    player = {x:0,y:0};
+    goal = {x:cols-1, y:rows-1};
+    moves = 0; startTime = performance.now();
+    if(timerId) cancelAnimationFrame(timerId);
+    draw(); tick();
+  }
+
+  function tick(){
+    const dt = (performance.now()-startTime)/1000;
+    timeEl.textContent = dt.toFixed(1);
+    timerId = requestAnimationFrame(tick);
+  }
+
+  function draw(){
+    const W = cols*cell+2, H = rows*cell+2;
+    cv.width=W; cv.height=H;
+    ctx.clearRect(0,0,W,H);
+
+    // grid background
+    ctx.fillStyle = '#0b1526';
+    ctx.fillRect(0,0,W,H);
+
+    // draw walls
+    ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--wall');
+    ctx.lineWidth = 3;
+    ctx.lineCap = 'square';
+    ctx.beginPath();
+    for(let y=0;y<rows;y++){
+      for(let x=0;x<cols;x++){
+        const c=maze[y][x];
+        const sx = 1+x*cell, sy = 1+y*cell, ex = sx+cell, ey=sy+cell;
+        if(c.w.n) { ctx.moveTo(sx,sy); ctx.lineTo(ex,sy); }
+        if(c.w.e) { ctx.moveTo(ex,sy); ctx.lineTo(ex,ey); }
+        if(c.w.s) { ctx.moveTo(sx,ey); ctx.lineTo(ex,ey); }
+        if(c.w.w) { ctx.moveTo(sx,sy); ctx.lineTo(sx,ey); }
+      }
+    }
+    ctx.stroke();
+
+    // goal
+    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--goal');
+    drawCell(goal.x,goal.y, .65);
+
+    // player
+    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--player');
+    drawCell(player.x,player.y, .6, true);
+  }
+
+  function drawCell(x,y,scale=0.7,shadow=false){
+    const px = 1 + x*cell + (cell*(1-scale))/2;
+    const py = 1 + y*cell + (cell*(1-scale))/2;
+    const s  = cell*scale;
+    if(shadow){
+      ctx.fillStyle = 'rgba(0,0,0,.25)';
+      ctx.beginPath(); ctx.roundRect(px+1,py+2,s,s,6); ctx.fill();
+      ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--player');
+    }
+    ctx.beginPath(); ctx.roundRect(px,py,s,s,8); ctx.fill();
+  }
+
+  function canMove(dx,dy){
+    const {x,y} = player;
+    const c = maze[y][x];
+    if(dy===-1 && !c.w.n) return true;
+    if(dx=== 1 && !c.w.e) return true;
+    if(dy=== 1 && !c.w.s) return true;
+    if(dx===-1 && !c.w.w) return true;
+    return false;
+  }
+
+  function move(dx,dy){
+    if(!dx && !dy) return;
+    if(canMove(dx,dy)){
+      player.x += dx; player.y += dy; moves++; movesEl.textContent = moves;
+      draw();
+      if(player.x===goal.x && player.y===goal.y){
+        setTimeout(()=>win(), 50);
+      }
+    }
+  }
+
+  function win(){
+    cancelAnimationFrame(timerId);
+    const t = parseFloat(timeEl.textContent);
+    const msg = `Tebrikler! Süre: ${t}s | Hamle: ${moves}`;
+    // banner
+    ctx.fillStyle = 'rgba(0,0,0,.55)';
+    ctx.fillRect(0,cv.height/2-40,cv.width,80);
+    ctx.fillStyle = '#eaffff';
+    ctx.font = '700 20px Inter, system-ui, Segoe UI, Arial';
+    ctx.textAlign='center';
+    ctx.fillText(msg, cv.width/2, cv.height/2+7);
+  }
+
+  // keyboard
+  window.addEventListener('keydown',e=>{
+    const k=e.key.toLowerCase();
+    if(['arrowup','w'].includes(k)) { e.preventDefault(); move(0,-1); }
+    else if(['arrowdown','s'].includes(k)) { e.preventDefault(); move(0,1); }
+    else if(['arrowleft','a'].includes(k)) { e.preventDefault(); move(-1,0); }
+    else if(['arrowright','d'].includes(k)) { e.preventDefault(); move(1,0); }
+    else if(k==='r') reset();
+  });
+
+  // dpad
+  document.querySelectorAll('.dpad button').forEach(b=>{
+    b.addEventListener('click',()=>{
+      const d=b.dataset.dir;
+      if(d==='up') move(0,-1);
+      if(d==='down') move(0,1);
+      if(d==='left') move(-1,0);
+      if(d==='right') move(1,0);
+    })
+  });
+
+  // touch swipe on canvas
+  let sx=0, sy=0;
+  cv.addEventListener('touchstart',e=>{const t=e.touches[0]; sx=t.clientX; sy=t.clientY;});
+  cv.addEventListener('touchend',e=>{
+    const t=e.changedTouches[0];
+    const dx=t.clientX-sx, dy=t.clientY-sy;
+    const ax=Math.abs(dx), ay=Math.abs(dy);
+    if(Math.max(ax,ay)<24) return;
+    if(ax>ay) move(Math.sign(dx),0); else move(0,Math.sign(dy));
+  });
+
+  // UI
+  newBtn.addEventListener('click', reset);
+  sizeSel.addEventListener('change', reset);
+
+  // polyfill for roundRect
+  if(!CanvasRenderingContext2D.prototype.roundRect){
+    CanvasRenderingContext2D.prototype.roundRect=function(x,y,w,h,r){
+      const rr = Math.min(r, Math.abs(w/2), Math.abs(h/2));
+      this.beginPath();
+      this.moveTo(x+rr,y);
+      this.arcTo(x+w,y,x+w,y+h,rr);
+      this.arcTo(x+w,y+h,x,y+h,rr);
+      this.arcTo(x,y+h,x,y,rr);
+      this.arcTo(x,y,x+w,y,rr);
+      this.closePath();
+      return this;
+    }
+  }
+
+  reset();
+})();
+</script>
+</body>
+</html>
