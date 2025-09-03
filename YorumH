@@ -10,10 +10,12 @@
   <h1>Yorum Gönder</h1>
 
   <iframe 
-    src="https://docs.google.com/forms/d/e/FORM_ID/viewform?embedded=true"
+    src="https://docs.google.com/forms/d/e/1FAIpQLSd-YlazNrWeWK9Rw0ID6mcBcBI4juNSC87wmZEzFfsuCxhMDg/viewform?embedded=true" 
     width="100%" 
     height="820" 
     frameborder="0" 
+    marginheight="0" 
+    marginwidth="0" 
     style="border:0" 
     loading="lazy">
     Yükleniyor…
