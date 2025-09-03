@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Basit Yarış</title>
+<style>
+  :root{
+    --bg:#0b1220; --road:#1d2433; --lane:#cfd6e3; --car:#00d4ff; --ob:#ff3b30; --ui:#e6eef6;
+  }
+  html,body{height:100%;margin:0;background:var(--bg);color:var(--ui);font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial}
+  .wrap{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+  canvas{display:block;touch-action:none}
+  .hud{position:fixed;top:10px;left:0;right:0;display:flex;justify-content:space-between;
+       padding:0 14px;font-weight:600;pointer-events:none}
+  .btns{position:fixed;left:0;right:0;bottom:env(safe-area-inset-bottom,12px);display:flex;gap:12px;justify-content:center}
+  .btn{user-select:none;-webkit-user-select:none;width:40vw;max-width:240px;height:68px;border-radius:18px;
+       background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);backdrop-filter:blur(6px);
+       display:flex;align-items:center;justify-content:center;font-size:18px;color:#fff}
+  .btn:active{transform:scale(.98)}
+  .overlay{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.55)}
+  .card{background:#121827;border:1px solid #232c3d;border-radius:16px;padding:18px 16px;max-width:360px;text-align:center}
+  .card h1{margin:8px 0 10px;font-size:22px}
+  .card p{opacity:.85;margin:8px 0}
+  .card .action{margin-top:12px;display:inline-block;padding:10px 14px;border-radius:12px;background:#0ea5e9;color:#fff}
+  @media (hover:hover){ .btn{cursor:pointer} .action{cursor:pointer}}
+</style>
+</head>
+<body>
+<div class="wrap"><canvas id="game"></canvas></div>
+<div class="hud"><div id="score">Skor: 0</div><div id="speed">Hız: 0</div></div>
+<div class="btns">
+  <div class="btn" id="leftBtn">◀︎</div>
+  <div class="btn" id="rightBtn">▶︎</div>
+</div>
+<div class="overlay" id="overlay">
+  <div class="card">
+    <h1 id="title">Basit Yarış</h1>
+    <p>Kontrol: Sol/sağ butonlar veya ekranın sol/sağına basılı tut.</p>
+    <p>Çarpma = oyun biter. Mesafe arttıkça hız artar.</p>
+    <a class="action" id="startBtn">Başlat</a>
+  </div>
+</div>
+
+<script>
+(() => {
+  // ---- Canvas kurulum (Retina) ----
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  let DPR = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+  let W = 0, H = 0;
+
+  function resize(){
+    DPR = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+    W = Math.floor(window.innerWidth);
+    H = Math.floor(window.innerHeight);
+    canvas.width = Math.floor(W * DPR);
+    canvas.height = Math.floor(H * DPR);
+    canvas.style.width = W + 'px';
+    canvas.style.height = H + 'px';
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    layout();
+  }
+  window.addEventListener('resize', resize, {passive:true});
+
+  // ---- Oyun durumu ----
+  const state = {
+    running:false,
+    over:false,
+    t:0,
+    score:0,
+    dist:0,
+    road:{x:0,y:0,w:0,h:0,lanes:3,laneW:0,markY:0},
+    car:{x:0,y:0,w:0,h:0,vx:0,maxVx:340,acc:1400,color:getCss('--car')},
+    speed:260, // px/sn
+    speedMax:520,
+    speedGain:12, // sn başına hız artışı
+    obs:[],
+    spawnEvery:0.95, // sn
+    spawnTimer:0
+  };
+
+  function getCss(v){ return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
+
+  function layout(){
+    // Yol genişliği ekranın %70'i, min 260, max 520
+    const roadW = Math.max(260, Math.min(Math.floor(W*0.7), 520));
+    const roadX = Math.floor((W - roadW)/2);
+    state.road.x = roadX;
+    state.road.w = roadW;
+    state.road.y = 0;
+    state.road.h = H;
+    state.road.laneW = roadW / state.road.lanes;
+    // Araba boyutu
+    state.car.w = Math.floor(state.road.laneW * 0.44);
+    state.car.h = Math.floor(state.car.w * 1.8);
+    state.car.y = Math.floor(H - state.car.h - 26);
+    if (!state.running && !state.over){
+      // başta ortadaki şerit
+      state.car.x = Math.floor(state.road.x + state.road.laneW*1.5 - state.car.w/2);
+    } else {
+      // yol yeniden hesaplandığında taşmayı düzelt
+      state.car.x = Math.max(state.road.x + 6, Math.min(state.road.x + state.road.w - state.car.w - 6, state.car.x));
+    }
+  }
+
+  // ---- Girdi (klavye + dokunmatik) ----
+  let leftHold=false, rightHold=false;
+
+  document.addEventListener('keydown', e=>{
+    if (e.key === 'ArrowLeft' || e.key==='a' || e.key==='A') leftHold = true;
+    if (e.key === 'ArrowRight'|| e.key==='d' || e.key==='D') rightHold = true;
+    if ((e.key===' '||e.key==='Enter') && !state.running) start();
+  });
+  document.addEventListener('keyup', e=>{
+    if (e.key === 'ArrowLeft' || e.key==='a' || e.key==='A') leftHold = false;
+    if (e.key === 'ArrowRight'|| e.key==='d' || e.key==='D') rightHold = false;
+  });
+
+  function pointerDown(x){
+    if (!state.running) { start(); return; }
+    if (x < W/2) leftHold = true; else rightHold = true;
+  }
+  function pointerUp(){ leftHold=false; rightHold=false; }
+
+  canvas.addEventListener('pointerdown', e=>{ pointerDown(e.clientX); });
+  canvas.addEventListener('pointerup', pointerUp);
+  canvas.addEventListener('pointercancel', pointerUp);
+  canvas.addEventListener('pointerout', pointerUp);
+  canvas.addEventListener('pointerleave', pointerUp);
+  canvas.addEventListener('contextmenu', e=>e.preventDefault());
+
+  // Ekran altı butonlar
+  const leftBtn = document.getElementById('leftBtn');
+  const rightBtn = document.getElementById('rightBtn');
+  leftBtn.addEventListener('pointerdown', e=>{ e.preventDefault(); pointerDown(0); });
+  rightBtn.addEventListener('pointerdown', e=>{ e.preventDefault(); pointerDown(W); });
+  leftBtn.addEventListener('pointerup', pointerUp);
+  rightBtn.addEventListener('pointerup', pointerUp);
+  leftBtn.addEventListener('pointerleave', pointerUp);
+  rightBtn.addEventListener('pointerleave', pointerUp);
+
+  // ---- Overlay ----
+  const overlay = document.getElementById('overlay');
+  const startBtn = document.getElementById('startBtn');
+  const titleEl = document.getElementById('title');
+  const scoreEl = document.getElementById('score');
+  const speedEl = document.getElementById('speed');
+
+  startBtn.addEventListener('click', ()=> start());
+
+  function showOverlay(text,btnText='Tekrar Oyna'){
+    titleEl.textContent = text;
+    startBtn.textContent = btnText;
+    overlay.style.display = 'flex';
+  }
+  function hideOverlay(){ overlay.style.display = 'none'; }
+
+  // ---- Engeller ----
+  function spawnObstacle(){
+    // 1-3 adet, rastgele şeritlere
+    const n = Math.random()<0.55 ? 1 : (Math.random()<0.5?2:3);
+    const lanes = [0,1,2].sort(()=>Math.random()-0.5).slice(0,n);
+    for (const ln of lanes){
+      const w = Math.floor(state.road.laneW * (0.46 + Math.random()*0.08));
+      const h = Math.floor(w * (1.6 + Math.random()*0.6));
+      const cx = Math.floor(state.road.x + ln*state.road.laneW + state.road.laneW/2);
+      const x = Math.floor(cx - w/2);
+      const y = -h - 12;
+      state.obs.push({x, y, w, h, color: Math.random()<0.6 ? getCss('--ob') : '#ffa502'});
+    }
+  }
+
+  // ---- Çizim yardımcıları ----
+  function roundRect(x,y,w,h,r, fill, stroke){
+    r = Math.min(r, w/2, h/2);
+    ctx.beginPath();
+    ctx.moveTo(x+r,y);
+    ctx.arcTo(x+w,y,x+w,y+h,r);
+    ctx.arcTo(x+w,y+h,x,y+h,r);
+    ctx.arcTo(x,y+h,x,y,r);
+    ctx.arcTo(x,y,x+w,y,r);
+    ctx.closePath();
+    if (fill){ ctx.fillStyle = fill; ctx.fill(); }
+    if (stroke){ ctx.strokeStyle = stroke; ctx.stroke(); }
+  }
+
+  function drawRoad(dt){
+    // yol
+    ctx.fillStyle = getCss('--road');
+    ctx.fillRect(state.road.x, state.road.y, state.road.w, state.road.h);
+    // şerit çizgileri animasyon
+    const segH = 24, gap = 18, total = segH + gap;
+    state.road.markY += state.speed * dt;
+    const offset = state.road.markY % total;
+    ctx.strokeStyle = getCss('--lane');
+    ctx.lineWidth = 4;
+    ctx.setLineDash([segH, gap]);
+    const xs = [state.road.x + state.road.laneW, state.road.x + state.road.laneW*2];
+    for (const x of xs){
+      ctx.beginPath();
+      ctx.moveTo(Math.floor(x), -offset);
+      ctx.lineTo(Math.floor(x), H);
+      ctx.stroke();
+    }
+    ctx.setLineDash([]);
+    // kenarlar
+    ctx.fillStyle = '#0e1524';
+    ctx.fillRect(0,0,state.road.x,H);
+    ctx.fillRect(state.road.x+state.road.w,0,W-(state.road.x+state.road.w),H);
+  }
+
+  // ---- Oyun döngüsü ----
+  let last = 0;
+  function loop(ts){
+    if (!state.running) return;
+    if (!last) last = ts;
+    const dt = Math.min(0.033, (ts - last)/1000);
+    last = ts;
+
+    update(dt);
+    render();
+    requestAnimationFrame(loop);
+  }
+
+  function update(dt){
+    // hız artışı
+    state.speed = Math.min(state.speedMax, state.speed + state.speedGain*dt);
+    state.dist += state.speed * dt;
+    state.score = Math.floor(state.dist / 10);
+
+    // girdi → yatay hız
+    const want = (rightHold?1:0) - (leftHold?1:0);
+    const targetVx = want * state.car.maxVx;
+    const diff = targetVx - state.car.vx;
+    const ax = Math.sign(diff) * state.car.acc;
+    if (Math.abs(diff) < Math.abs(ax*dt)) state.car.vx = targetVx;
+    else state.car.vx += ax*dt;
+
+    state.car.x += state.car.vx * dt;
+    // Yol sınırı
+    const minX = state.road.x + 6;
+    const maxX = state.road.x + state.road.w - state.car.w - 6;
+    if (state.car.x < minX){ state.car.x = minX; state.car.vx = 0; }
+    if (state.car.x > maxX){ state.car.x = maxX; state.car.vx = 0; }
+
+    // Engeller
+    state.spawnTimer += dt;
+    const wantSpawn = Math.max(0.42, state.spawnEvery - (state.dist/1800)*0.12);
+    if (state.spawnTimer >= wantSpawn){ state.spawnTimer = 0; spawnObstacle(); }
+    for (let i=state.obs.length-1;i>=0;i--){
+      const o = state.obs[i];
+      o.y += state.speed * dt;
+      if (o.y > H+40){ state.obs.splice(i,1); continue; }
+      // çarpışma
+      if (rectsOverlap(state.car,o)){ gameOver(); return; }
+    }
+
+    // HUD
+    scoreEl.textContent = 'Skor: ' + state.score.toString();
+    speedEl.textContent = 'Hız: ' + Math.round(state.speed*3.6/100).toString(); // sembolik
+  }
+
+  function rectsOverlap(a,b){
+    return !(a.x + a.w < b.x || a.x > b.x + b.w || a.y + a.h < b.y || a.y > b.y + b.h);
+  }
+
+  function render(){
+    ctx.clearRect(0,0,W,H);
+    drawRoad(0);
+
+    // engeller
+    for (const o of state.obs){
+      roundRect(o.x, o.y, o.w, o.h, 8, o.color);
+      // basit far çizgisi
+      ctx.fillStyle = 'rgba(255,255,255,.08)';
+      ctx.fillRect(o.x+6, o.y+o.h*0.1, o.w-12, 4);
+    }
+
+    // araba
+    roundRect(state.car.x, state.car.y, state.car.w, state.car.h, 10, getCss('--car'));
+    // cam
+    ctx.fillStyle = 'rgba(0,0,0,.25)';
+    ctx.fillRect(state.car.x+6, state.car.y+8, state.car.w-12, state.car.h*0.32);
+  }
+
+  function start(){
+    hideOverlay();
+    // sıfırla
+    state.running = true; state.over=false;
+    state.t = 0; state.score=0; state.dist=0;
+    state.speed = 260; state.obs.length = 0;
+    state.spawnTimer = 0; state.car.vx = 0;
+    layout(); last = 0;
+    requestAnimationFrame(loop);
+  }
+  function gameOver(){
+    state.running = false; state.over=true;
+    showOverlay('Oyun Bitti | Skor: '+state.score, 'Yeniden Başlat');
+  }
+
+  // İlk yükleme
+  resize();
+  showOverlay('Basit Yarış');
+})();
+</script>
+</body>
+</html>
