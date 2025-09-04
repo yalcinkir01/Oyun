@@ -15,12 +15,14 @@
        background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);backdrop-filter:blur(6px);
        display:flex;align-items:center;justify-content:center;font-size:18px;color:#fff}
   .btn:active{transform:scale(.98)}
-  .overlay{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.55)}
+  /* ÖNEMLİ: overlay varsayılan olarak AÇIK, böylece JS çökse bile Start görünür */
+  .overlay{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.55);z-index:10}
   .card{background:#121827;border:1px solid #232c3d;border-radius:16px;padding:18px 16px;max-width:360px;text-align:center}
   .card h1{margin:8px 0 10px;font-size:22px}
   .card p{opacity:.85;margin:8px 0}
   .card .action{margin-top:12px;display:inline-block;padding:10px 14px;border-radius:12px;background:#0ea5e9;color:#fff}
   @media (hover:hover){ .btn{cursor:pointer} .action{cursor:pointer}}
+  #err{position:fixed;left:8px;bottom:8px;background:#300;color:#fdd;padding:6px 8px;border-radius:8px;font:12px/1.3 monospace;max-width:90vw;display:none;z-index:20}
 </style>
 </head>
 <body>
@@ -37,205 +39,223 @@
     <a class="action" id="startBtn">Başlat</a>
   </div>
 </div>
+<div id="err"></div>
 
 <script>
-(()=>{
-const canvas=document.getElementById('game'); const ctx=canvas.getContext('2d');
-let DPR=Math.max(1,Math.min(2,window.devicePixelRatio||1)), W=0,H=0;
-function resize(){ DPR=Math.max(1,Math.min(2,window.devicePixelRatio||1));
-  W=Math.floor(window.innerWidth); H=Math.floor(window.innerHeight);
-  canvas.width=Math.floor(W*DPR); canvas.height=Math.floor(H*DPR);
-  canvas.style.width=W+'px'; canvas.style.height=H+'px'; ctx.setTransform(DPR,0,0,DPR,0,0);
-  layout(); ensureRowsAhead();
-}
-window.addEventListener('resize',resize,{passive:true});
-const css=v=>getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+(() => {
+  // Hata yakalama: ekranda göster
+  const errBox = document.getElementById('err');
+  window.addEventListener('error', e => { errBox.style.display='block'; errBox.textContent = 'Hata: ' + (e.message || e.error); });
+  window.addEventListener('unhandledrejection', e => { errBox.style.display='block'; errBox.textContent = 'Promise Hatası: ' + (e.reason && e.reason.message ? e.reason.message : e.reason); });
 
-const state={
-  running:false, over:false,
-  score:0, dist:0,
-  road:{x:0,y:0,w:0,h:0,lanes:3,laneW:0,markY:0},
-  car:{x:0,y:0,w:0,h:0,vx:0,maxVx:340,acc:1400},
-  speed:260, speedMax:520, speedGain:12,
-  rows:[], nextRowY:-220, minGap:150, maxGap:210, maxAhead:1.3,
-  hardTimer:0
-};
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const overlay = document.getElementById('overlay');
+  const startBtn = document.getElementById('startBtn');
+  const titleEl = document.getElementById('title');
+  const scoreEl = document.getElementById('score');
+  const speedEl = document.getElementById('speed');
 
-function layout(){
-  const roadW=Math.max(260,Math.min(Math.floor(W*0.7),520));
-  const roadX=Math.floor((W-roadW)/2);
-  state.road.x=roadX; state.road.w=roadW; state.road.y=0; state.road.h=H;
-  state.road.laneW=roadW/state.road.lanes;
-  state.car.w=Math.floor(state.road.laneW*0.44); state.car.h=Math.floor(state.car.w*1.8);
-  state.car.y=Math.floor(H-state.car.h-26);
-  if(!state.running && !state.over){
-    state.car.x=Math.floor(state.road.x+state.road.laneW*1.5-state.car.w/2);
-  }else{
-    state.car.x=Math.max(state.road.x+6,Math.min(state.road.x+state.road.w-state.car.w-6,state.car.x));
+  let DPR = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+  let W = 0, H = 0, last = 0;
+
+  const state = {
+    running:false, over:false,
+    score:0, dist:0,
+    road:{x:0,y:0,w:0,h:0,lanes:3,laneW:0,markY:0},
+    car:{x:0,y:0,w:0,h:0,vx:0,maxVx:340,acc:1400},
+    speed:260, speedMax:520, speedGain:12,
+    rows:[], nextRowY:-220, minGap:150, maxGap:210, maxAhead:1.3,
+    hardTimer:0
+  };
+
+  function css(v){ return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
+
+  function resize(){
+    DPR = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+    W = Math.floor(window.innerWidth); H = Math.floor(window.innerHeight);
+    canvas.width = Math.floor(W*DPR); canvas.height = Math.floor(H*DPR);
+    canvas.style.width = W+'px'; canvas.style.height = H+'px';
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    layout();
+    ensureRowsAhead(); // emniyet
   }
-}
+  window.addEventListener('resize', resize, {passive:true});
 
-let leftHold=false,rightHold=false;
-document.addEventListener('keydown',e=>{
-  if(e.key==='ArrowLeft'||e.key==='a'||e.key==='A') leftHold=true;
-  if(e.key==='ArrowRight'||e.key==='d'||e.key==='D') rightHold=true;
-  if((e.key===' '||e.key==='Enter') && !state.running) start();
-});
-document.addEventListener('keyup',e=>{
-  if(e.key==='ArrowLeft'||e.key==='a'||e.key==='A') leftHold=false;
-  if(e.key==='ArrowRight'||e.key==='d'||e.key==='D') rightHold=false;
-});
-function pointerDown(x){ if(!state.running){start();return;} if(x<W/2) leftHold=true; else rightHold=true; }
-function pointerUp(){ leftHold=false; rightHold=false; }
-canvas.addEventListener('pointerdown',e=>{pointerDown(e.clientX);});
-canvas.addEventListener('pointerup',pointerUp);
-canvas.addEventListener('pointercancel',pointerUp);
-canvas.addEventListener('pointerout',pointerUp);
-canvas.addEventListener('pointerleave',pointerUp);
-canvas.addEventListener('contextmenu',e=>e.preventDefault());
-const leftBtn=document.getElementById('leftBtn'), rightBtn=document.getElementById('rightBtn');
-leftBtn.addEventListener('pointerdown',e=>{e.preventDefault();pointerDown(0);});
-rightBtn.addEventListener('pointerdown',e=>{e.preventDefault();pointerDown(W);});
-leftBtn.addEventListener('pointerup',pointerUp);
-rightBtn.addEventListener('pointerup',pointerUp);
-leftBtn.addEventListener('pointerleave',pointerUp);
-rightBtn.addEventListener('pointerleave',pointerUp);
-
-const overlay=document.getElementById('overlay');
-const startBtn=document.getElementById('startBtn');
-const titleEl=document.getElementById('title');
-const scoreEl=document.getElementById('score');
-const speedEl=document.getElementById('speed');
-startBtn.addEventListener('click',()=>start());
-const showOverlay=(t,b='Tekrar Oyna')=>{titleEl.textContent=t; startBtn.textContent=b; overlay.style.display='flex';};
-const hideOverlay=()=>{overlay.style.display='none';};
-
-const randGap=()=>Math.floor(state.minGap+Math.random()*(state.maxGap-state.minGap));
-
-function spawnRow(forceTwo=false){
-  if (state.road.laneW <= 0) return; // emniyet: layout yapılmadan doğurma
-  const lanes=[0,1,2].sort(()=>Math.random()-0.5);
-  const count = forceTwo ? 2 : (Math.random()<0.62 ? 1 : 2);
-  const chosen=lanes.slice(0,count);
-  const items=[]; let maxH=0;
-  for(const ln of chosen){
-    const w=Math.floor(state.road.laneW*(0.46+Math.random()*0.04));
-    const h=Math.floor(w*(1.7+Math.random()*0.3));
-    const cx=Math.floor(state.road.x+ln*state.road.laneW+state.road.laneW/2);
-    const x=Math.floor(cx-w/2);
-    const y=state.nextRowY-h;
-    items.push({x,y,w,h}); if(h>maxH) maxH=h;
-  }
-  state.rows.push({yTop:state.nextRowY,height:maxH,items});
-  state.nextRowY -= (maxH + randGap());
-  if(state.rows.length>80) state.rows.splice(0,state.rows.length-80);
-}
-
-function ensureRowsAhead(){
-  const needTop = -Math.floor(H*state.maxAhead);
-  while(state.nextRowY >= needTop) spawnRow(false);
-}
-
-function rr(x,y,w,h,r,fill){ r=Math.min(r,w/2,h/2); ctx.beginPath();
-  ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r);
-  ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); if(fill){ctx.fillStyle=fill; ctx.fill();}
-}
-function drawRoad(dt){
-  ctx.fillStyle=css('--road'); ctx.fillRect(state.road.x,0,state.road.w,H);
-  const segH=24,gap=18,total=segH+gap;
-  state.road.markY += state.speed*dt*0.12;
-  const offset=state.road.markY%total;
-  ctx.strokeStyle=css('--lane'); ctx.lineWidth=4; ctx.setLineDash([segH,gap]);
-  const xs=[state.road.x+state.road.laneW,state.road.x+state.road.laneW*2];
-  for(const x of xs){ ctx.beginPath(); ctx.moveTo(Math.floor(x),-offset); ctx.lineTo(Math.floor(x),H); ctx.stroke(); }
-  ctx.setLineDash([]);
-  ctx.fillStyle='#0e1524'; ctx.fillRect(0,0,state.road.x,H);
-  ctx.fillRect(state.road.x+state.road.w,0,W-(state.road.x+state.road.w),H);
-}
-
-let last=0;
-function loop(ts){
-  if(!state.running) return;
-  if(!last) last=ts;
-  const dt=Math.min(0.033,(ts-last)/1000); last=ts;
-  update(dt); render(dt);
-  requestAnimationFrame(loop);
-}
-
-function update(dt){
-  state.speed=Math.min(state.speedMax,state.speed+state.speedGain*dt);
-  state.dist += state.speed*dt;
-  state.score=Math.floor(state.dist/10);
-
-  const want=(rightHold?1:0)-(leftHold?1:0);
-  const targetVx=want*state.car.maxVx;
-  const diff=targetVx-state.car.vx;
-  const ax=Math.sign(diff)*state.car.acc;
-  if(Math.abs(diff)<Math.abs(ax*dt)) state.car.vx=targetVx; else state.car.vx+=ax*dt;
-  state.car.x+=state.car.vx*dt;
-  const minX=state.road.x+6,maxX=state.road.x+state.road.w-state.car.w-6;
-  if(state.car.x<minX){state.car.x=minX;state.car.vx=0;}
-  if(state.car.x>maxX){state.car.x=maxX;state.car.vx=0;}
-
-  ensureRowsAhead();
-
-  // 3 sn’de bir 2 şerit dolu satır
-  state.hardTimer += dt;
-  if(state.hardTimer >= 3){
-    spawnRow(true);
-    state.hardTimer = 0;
-  }
-
-  const dy=state.speed*dt;
-  for(let i=state.rows.length-1;i>=0;i--){
-    const row=state.rows[i];
-    row.yTop+=dy;
-    for(const it of row.items){
-      it.y+=dy;
-      if(overlap(state.car,it)){ gameOver(); return; }
-    }
-    if(row.items[0].y>H+80) state.rows.splice(i,1);
-  }
-
-  scoreEl.textContent='Skor: '+state.score;
-  speedEl.textContent='Hız: '+Math.round(state.speed*3.6/100);
-}
-
-function overlap(a,b){
-  return !(a.x+a.w<b.x || a.x>b.x+b.w || a.y+a.h<b.y || a.y>b.y+b.h);
-}
-
-function render(dt){
-  ctx.clearRect(0,0,W,H);
-  drawRoad(dt);
-  for(const row of state.rows){
-    for(const o of row.items){
-      rr(o.x,o.y,o.w,o.h,8,css('--ob'));
-      ctx.fillStyle='rgba(255,255,255,.08)';
-      ctx.fillRect(o.x+6,o.y+o.h*0.1,o.w-12,4);
+  function layout(){
+    const roadW = Math.max(260, Math.min(Math.floor(W*0.7), 520));
+    const roadX = Math.floor((W-roadW)/2);
+    state.road.x=roadX; state.road.w=roadW; state.road.y=0; state.road.h=H;
+    state.road.laneW = roadW/state.road.lanes;
+    state.car.w = Math.floor(state.road.laneW*0.44);
+    state.car.h = Math.floor(state.car.w*1.8);
+    state.car.y = Math.floor(H - state.car.h - 26);
+    if (!state.running && !state.over){
+      state.car.x = Math.floor(state.road.x + state.road.laneW*1.5 - state.car.w/2);
+    } else {
+      state.car.x = Math.max(state.road.x+6, Math.min(state.road.x+state.road.w-state.car.w-6, state.car.x));
     }
   }
-  rr(state.car.x,state.car.y,state.car.w,state.car.h,10,css('--car'));
-  ctx.fillStyle='rgba(0,0,0,.25)';
-  ctx.fillRect(state.car.x+6,state.car.y+8,state.car.w-12,state.car.h*0.32);
-}
 
-function start(){
-  hideOverlay();
-  state.running=true; state.over=false;
-  state.score=0; state.dist=0;
-  state.speed=260; state.rows.length=0; state.car.vx=0;
-  state.nextRowY = -220; state.hardTimer = 0;
+  let leftHold=false, rightHold=false;
+  document.addEventListener('keydown', e=>{
+    if (e.key==='ArrowLeft'||e.key==='a'||e.key==='A') leftHold=true;
+    if (e.key==='ArrowRight'||e.key==='d'||e.key==='D') rightHold=true;
+    if ((e.key===' '||e.key==='Enter') && !state.running) start();
+  });
+  document.addEventListener('keyup', e=>{
+    if (e.key==='ArrowLeft'||e.key==='a'||e.key==='A') leftHold=false;
+    if (e.key==='ArrowRight'||e.key==='d'||e.key==='D') rightHold=false;
+  });
 
-  // DÜZELTİLMİŞ SIRA: önce layout, sonra stok
-  layout();
-  ensureRowsAhead();
+  function pointerDown(x){ if(!state.running){ start(); return; } if(x<W/2) leftHold=true; else rightHold=true; }
+  function pointerUp(){ leftHold=false; rightHold=false; }
+  canvas.addEventListener('pointerdown', e=>{ pointerDown(e.clientX); });
+  canvas.addEventListener('pointerup', pointerUp);
+  canvas.addEventListener('pointercancel', pointerUp);
+  canvas.addEventListener('pointerout', pointerUp);
+  canvas.addEventListener('pointerleave', pointerUp);
+  canvas.addEventListener('contextmenu', e=>e.preventDefault());
 
-  last=0; requestAnimationFrame(loop);
-}
-function gameOver(){ state.running=false; state.over=true; showOverlay('Oyun Bitti | Skor: '+state.score,'Yeniden Başlat'); }
+  const leftBtn = document.getElementById('leftBtn');
+  const rightBtn = document.getElementById('rightBtn');
+  leftBtn.addEventListener('pointerdown', e=>{ e.preventDefault(); pointerDown(0); });
+  leftBtn.addEventListener('pointerup', pointerUp);
+  leftBtn.addEventListener('pointerleave', pointerUp);
+  rightBtn.addEventListener('pointerdown', e=>{ e.preventDefault(); pointerDown(W); });
+  rightBtn.addEventListener('pointerup', pointerUp);
+  rightBtn.addEventListener('pointerleave', pointerUp);
 
-resize(); showOverlay('Basit Yarış');
+  function showOverlay(t,b='Tekrar Oyna'){ titleEl.textContent=t; startBtn.textContent=b; overlay.style.display='flex'; }
+  function hideOverlay(){ overlay.style.display='none'; }
+
+  const randGap=()=>Math.floor(state.minGap + Math.random()*(state.maxGap - state.minGap));
+
+  function spawnRow(forceTwo=false){
+    if (state.road.laneW <= 0) return; // layout yapılmadan çağrılırsa doğurma
+    const lanes=[0,1,2].sort(()=>Math.random()-0.5);
+    const count = forceTwo ? 2 : (Math.random()<0.62 ? 1 : 2);
+    const chosen=lanes.slice(0,count);
+    const items=[]; let maxH=0;
+    for(const ln of chosen){
+      const w=Math.floor(state.road.laneW*(0.46+Math.random()*0.04));
+      const h=Math.floor(w*(1.7+Math.random()*0.3));
+      const cx=Math.floor(state.road.x + ln*state.road.laneW + state.road.laneW/2);
+      const x=Math.floor(cx - w/2);
+      const y=state.nextRowY - h;
+      items.push({x,y,w,h}); if(h>maxH) maxH=h;
+    }
+    state.rows.push({yTop:state.nextRowY, height:maxH, items});
+    state.nextRowY -= (maxH + randGap());
+    if (state.rows.length>80) state.rows.splice(0, state.rows.length-80);
+  }
+
+  function ensureRowsAhead(){
+    const needTop = -Math.floor(H * state.maxAhead);
+    while (state.nextRowY >= needTop) spawnRow(false); // >= kritik
+  }
+
+  function rr(x,y,w,h,r,fill){ r=Math.min(r,w/2,h/2); ctx.beginPath();
+    ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r);
+    ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); if(fill){ctx.fillStyle=fill; ctx.fill();}
+  }
+  function drawRoad(dt){
+    ctx.fillStyle = css('--road'); ctx.fillRect(state.road.x,0,state.road.w,H);
+    const segH=24,gap=18,total=segH+gap;
+    state.road.markY += state.speed*dt*0.12;
+    const offset = state.road.markY % total;
+    ctx.strokeStyle = css('--lane'); ctx.lineWidth=4; ctx.setLineDash([segH,gap]);
+    const xs=[state.road.x+state.road.laneW, state.road.x+state.road.laneW*2];
+    for(const x of xs){ ctx.beginPath(); ctx.moveTo(Math.floor(x), -offset); ctx.lineTo(Math.floor(x), H); ctx.stroke(); }
+    ctx.setLineDash([]);
+    ctx.fillStyle='#0e1524';
+    ctx.fillRect(0,0,state.road.x,H);
+    ctx.fillRect(state.road.x+state.road.w,0,W-(state.road.x+state.road.w),H);
+  }
+
+  function overlap(a,b){
+    return !(a.x+a.w<b.x || a.x>b.x+b.w || a.y+a.h<b.y || a.y>b.y+b.h);
+  }
+
+  function update(dt){
+    state.speed = Math.min(state.speedMax, state.speed + state.speedGain*dt);
+    state.dist += state.speed*dt;
+    state.score = Math.floor(state.dist/10);
+
+    const want=(rightHold?1:0)-(leftHold?1:0);
+    const targetVx = want * state.car.maxVx;
+    const diff = targetVx - state.car.vx;
+    const ax = Math.sign(diff)*state.car.acc;
+    if (Math.abs(diff)<Math.abs(ax*dt)) state.car.vx = targetVx; else state.car.vx += ax*dt;
+    state.car.x += state.car.vx*dt;
+    const minX=state.road.x+6, maxX=state.road.x+state.road.w-state.car.w-6;
+    if (state.car.x<minX){ state.car.x=minX; state.car.vx=0; }
+    if (state.car.x>maxX){ state.car.x=maxX; state.car.vx=0; }
+
+    ensureRowsAhead();
+
+    // 3 sn’de bir zorunlu 2 şerit
+    state.hardTimer += dt;
+    if (state.hardTimer >= 3){ spawnRow(true); state.hardTimer = 0; }
+
+    const dy = state.speed*dt;
+    for (let i=state.rows.length-1;i>=0;i--){
+      const row = state.rows[i];
+      row.yTop += dy;
+      for (const it of row.items){
+        it.y += dy;
+        if (overlap(state.car,it)){ gameOver(); return; }
+      }
+      if (row.items[0].y > H+80) state.rows.splice(i,1);
+    }
+
+    scoreEl.textContent = 'Skor: ' + state.score;
+    speedEl.textContent = 'Hız: ' + Math.round(state.speed*3.6/100);
+  }
+
+  function render(dt){
+    ctx.clearRect(0,0,W,H);
+    drawRoad(dt);
+    for (const row of state.rows){
+      for (const o of row.items){
+        rr(o.x,o.y,o.w,o.h,8, css('--ob'));
+        ctx.fillStyle='rgba(255,255,255,.08)';
+        ctx.fillRect(o.x+6, o.y+o.h*0.1, o.w-12, 4);
+      }
+    }
+    rr(state.car.x,state.car.y,state.car.w,state.car.h,10, css('--car'));
+    ctx.fillStyle='rgba(0,0,0,.25)';
+    ctx.fillRect(state.car.x+6, state.car.y+8, state.car.w-12, state.car.h*0.32);
+  }
+
+  function loop(ts){
+    if(!state.running) return;
+    if(!last) last=ts;
+    const dt = Math.min(0.033, (ts-last)/1000); last=ts;
+    update(dt); render(dt);
+    requestAnimationFrame(loop);
+  }
+
+  function start(){
+    hideOverlay(); // overlay başlangıçta açıktı
+    state.running=true; state.over=false;
+    state.score=0; state.dist=0;
+    state.speed=260; state.rows.length=0; state.car.vx=0;
+    state.nextRowY = -220; state.hardTimer = 0;
+
+    // SIRA: önce layout sonra stok
+    layout();
+    ensureRowsAhead();
+
+    last=0;
+    requestAnimationFrame(loop);
+  }
+
+  function gameOver(){ state.running=false; state.over=true; showOverlay('Oyun Bitti | Skor: '+state.score,'Yeniden Başlat'); }
+
+  // Başlangıç: overlay açık, yalnızca boyutlandır
+  resize();
+  startBtn.addEventListener('click', start);
 })();
 </script>
 </body>
