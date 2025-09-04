@@ -76,14 +76,17 @@
     speedMax:520,
     speedGain:12, // sn başına hız artışı
     obs:[],
-    spawnEvery:0.95, // sn
+    spawnEvery:0.9, // temel doğum süresi
     spawnTimer:0
   };
+
+  // Satır çakışmasını ve üç şeridin birden dolmasını engellemek için:
+  const MIN_ROW_GAP = 140; // ardışık engel sıraları arası dikey mesafe
+  let lastRowY = -9999;    // son doğan sıranın üstü (ekran koordinatı)
 
   function getCss(v){ return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
 
   function layout(){
-    // Yol genişliği ekranın %70'i, min 260, max 520
     const roadW = Math.max(260, Math.min(Math.floor(W*0.7), 520));
     const roadX = Math.floor((W - roadW)/2);
     state.road.x = roadX;
@@ -91,15 +94,13 @@
     state.road.y = 0;
     state.road.h = H;
     state.road.laneW = roadW / state.road.lanes;
-    // Araba boyutu
+
     state.car.w = Math.floor(state.road.laneW * 0.44);
     state.car.h = Math.floor(state.car.w * 1.8);
     state.car.y = Math.floor(H - state.car.h - 26);
     if (!state.running && !state.over){
-      // başta ortadaki şerit
       state.car.x = Math.floor(state.road.x + state.road.laneW*1.5 - state.car.w/2);
     } else {
-      // yol yeniden hesaplandığında taşmayı düzelt
       state.car.x = Math.max(state.road.x + 6, Math.min(state.road.x + state.road.w - state.car.w - 6, state.car.x));
     }
   }
@@ -130,7 +131,6 @@
   canvas.addEventListener('pointerleave', pointerUp);
   canvas.addEventListener('contextmenu', e=>e.preventDefault());
 
-  // Ekran altı butonlar
   const leftBtn = document.getElementById('leftBtn');
   const rightBtn = document.getElementById('rightBtn');
   leftBtn.addEventListener('pointerdown', e=>{ e.preventDefault(); pointerDown(0); });
@@ -158,17 +158,26 @@
 
   // ---- Engeller ----
   function spawnObstacle(){
-    // 1-3 adet, rastgele şeritlere
-    const n = Math.random()<0.55 ? 1 : (Math.random()<0.5?2:3);
-    const lanes = [0,1,2].sort(()=>Math.random()-0.5).slice(0,n);
+    // Son sıraya yeterli dikey mesafe yoksa yeni sıra doğurma
+    if (lastRowY > -MIN_ROW_GAP) return;
+
+    // En az 1 şerit boş kalacak: 1 veya 2 engel doğur (asla 3 değil)
+    const lanesAll = [0,1,2];
+    const count = Math.random() < 0.65 ? 1 : 2;
+    const lanes = lanesAll.sort(()=>Math.random()-0.5).slice(0, count);
+
+    const rowTop = -20; // sıranın görünen üst kenarı
+
     for (const ln of lanes){
-      const w = Math.floor(state.road.laneW * (0.46 + Math.random()*0.08));
-      const h = Math.floor(w * (1.6 + Math.random()*0.6));
+      const w = Math.floor(state.road.laneW * (0.46 + Math.random()*0.06));
+      const h = Math.floor(w * (1.6 + Math.random()*0.5));
       const cx = Math.floor(state.road.x + ln*state.road.laneW + state.road.laneW/2);
       const x = Math.floor(cx - w/2);
-      const y = -h - 12;
+      const y = rowTop - h; // ekranın üstünde başlat
       state.obs.push({x, y, w, h, color: Math.random()<0.6 ? getCss('--ob') : '#ffa502'});
     }
+
+    lastRowY = rowTop; // son sırayı güncelle
   }
 
   // ---- Çizim yardımcıları ----
@@ -185,13 +194,12 @@
     if (stroke){ ctx.strokeStyle = stroke; ctx.stroke(); }
   }
 
-  function drawRoad(dt){
-    // yol
+  function drawRoad(){
     ctx.fillStyle = getCss('--road');
     ctx.fillRect(state.road.x, state.road.y, state.road.w, state.road.h);
-    // şerit çizgileri animasyon
+    // şerit çizgileri
     const segH = 24, gap = 18, total = segH + gap;
-    state.road.markY += state.speed * dt;
+    state.road.markY += 16; // görsel akış
     const offset = state.road.markY % total;
     ctx.strokeStyle = getCss('--lane');
     ctx.lineWidth = 4;
@@ -244,17 +252,25 @@
     if (state.car.x < minX){ state.car.x = minX; state.car.vx = 0; }
     if (state.car.x > maxX){ state.car.x = maxX; state.car.vx = 0; }
 
-    // Engeller
+    // Doğum sıklığını mesafeye göre kademeli hızlandır
+    const baseEvery = 0.9;
+    const minEvery = 0.55;
+    const diffEvery = Math.max(0, (state.dist/1800)*0.12);
+    const wantSpawn = Math.max(minEvery, baseEvery - diffEvery);
+
     state.spawnTimer += dt;
-    const wantSpawn = Math.max(0.42, state.spawnEvery - (state.dist/1800)*0.12);
     if (state.spawnTimer >= wantSpawn){ state.spawnTimer = 0; spawnObstacle(); }
+
+    // Engelleri hareket ettir
     for (let i=state.obs.length-1;i>=0;i--){
       const o = state.obs[i];
       o.y += state.speed * dt;
       if (o.y > H+40){ state.obs.splice(i,1); continue; }
-      // çarpışma
       if (rectsOverlap(state.car,o)){ gameOver(); return; }
     }
+
+    // Son sıranın ekrandaki konumu, hız kadar aşağı hareket ediyor
+    lastRowY += state.speed * dt;
 
     // HUD
     scoreEl.textContent = 'Skor: ' + state.score.toString();
@@ -267,30 +283,28 @@
 
   function render(){
     ctx.clearRect(0,0,W,H);
-    drawRoad(0);
+    drawRoad();
 
     // engeller
     for (const o of state.obs){
       roundRect(o.x, o.y, o.w, o.h, 8, o.color);
-      // basit far çizgisi
       ctx.fillStyle = 'rgba(255,255,255,.08)';
       ctx.fillRect(o.x+6, o.y+o.h*0.1, o.w-12, 4);
     }
 
     // araba
     roundRect(state.car.x, state.car.y, state.car.w, state.car.h, 10, getCss('--car'));
-    // cam
     ctx.fillStyle = 'rgba(0,0,0,.25)';
     ctx.fillRect(state.car.x+6, state.car.y+8, state.car.w-12, state.car.h*0.32);
   }
 
   function start(){
     hideOverlay();
-    // sıfırla
     state.running = true; state.over=false;
     state.t = 0; state.score=0; state.dist=0;
     state.speed = 260; state.obs.length = 0;
     state.spawnTimer = 0; state.car.vx = 0;
+    lastRowY = -9999;
     layout(); last = 0;
     requestAnimationFrame(loop);
   }
