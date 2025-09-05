@@ -5,16 +5,17 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Tetris – Tek Dosya</title>
   <style>
+    /* Tüm blokları tek bir mavi tonunda gösterilecek şekilde güncellendi */
     :root{
       --bg:#0b1020; --panel:#0f1730; --text:#e7eefc; --sub:#9fb0d6;
       --grid:#1b2342; --ghost:#3a4a88;
-      --c1:#3399ff; /* I */
-      --c2:#0066ff; /* J */
-      --c3:#0044cc; /* L */
-      --c4:#1a75ff; /* O */
-      --c5:#3385ff; /* S */
-      --c6:#3366cc; /* T */
-      --c7:#0033ff; /* Z */
+      --c1:#3399ff; /* Tek tip mavi */
+      --c2:#3399ff; /* Tek tip mavi */
+      --c3:#3399ff; /* Tek tip mavi */
+      --c4:#3399ff; /* Tek tip mavi */
+      --c5:#3399ff; /* Tek tip mavi */
+      --c6:#3399ff; /* Tek tip mavi */
+      --c7:#3399ff; /* Tek tip mavi */
     }
     *{box-sizing:border-box}
     body{margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,'Helvetica Neue',Arial; background: radial-gradient(1200px 600px at 20% 0%, #121a35, #090d1a 60%), var(--bg); color:var(--text); display:grid; place-items:center; min-height:100vh}
@@ -82,6 +83,7 @@
   const nctx = ncv.getContext('2d');
   const hctx = hcv.getContext('2d');
 
+  /* Tüm parçalar için tek renk maviyi kullanmak üzere güncellendi */
   const COLORS = [null,'var(--c1)','var(--c2)','var(--c3)','var(--c4)','var(--c5)','var(--c6)','var(--c7)'];
   const TYPE_INDEX = {I:1,J:2,L:3,O:4,S:5,T:6,Z:7};
   const SHAPES = {I:[[0,0,0,0],[1,1,1,1],[0,0,0,0],[0,0,0,0]],J:[[2,0,0],[2,2,2],[0,0,0]],L:[[0,0,3],[3,3,3],[0,0,0]],O:[[4,4],[4,4]],S:[[0,5,5],[5,5,0],[0,0,0]],T:[[0,6,0],[6,6,6],[0,0,0]],Z:[[7,7,0],[0,7,7],[0,0,0]]};
@@ -123,7 +125,97 @@
     document.getElementById('score').textContent=score;
     document.getElementById('lines').textContent=lines;
     document.getElementById('level').textContent=level;
+    drawNext();
+    drawHold();
   }
+  
+  function drawNext(){
+    nctx.clearRect(0,0,ncv.width,ncv.height);
+    if(nextQueue.length === 0) return;
+    
+    // Sadece sıradaki ilk parçayı çiz
+    const type = nextQueue[0];
+    const matrix = SHAPES[type];
+    const colorIndex = TYPE_INDEX[type];
+    const size = 120; // Canvas boyutu
+    const cellSize = SIZE * 0.7; // Yan panel için daha küçük boyut
+    const w = matrix[0].length;
+    const h = matrix.length;
+    
+    // Parçayı ortalamak için başlangıç koordinatları
+    let startX = (size - w * cellSize) / 2;
+    let startY = (size - h * cellSize) / 2;
+    
+    // I parçası için dikey ortalamayı iyileştirme
+    if(type === 'I'){
+        startY += cellSize/2; 
+    } else if (w < 4 && h < 4){
+        // Diğer parçalar (3x3 matrisler) için hafif yukarı kaydırma
+        startY -= cellSize/4;
+    }
+
+    nctx.save();
+    for(let y=0;y<h;y++) {
+      for(let x=0;x<w;x++) {
+        if(matrix[y][x]) {
+          const color=COLORS[colorIndex];
+          nctx.fillStyle=color; 
+          nctx.fillRect(startX + x*cellSize+1, startY + y*cellSize+1, cellSize-2, cellSize-2);
+          
+          // Işık efekti (küçültülmüş)
+          nctx.globalAlpha=0.6; nctx.fillStyle='rgba(255,255,255,0.12)';
+          nctx.fillRect(startX + x*cellSize+2, startY + y*cellSize+2, cellSize-4, 4);
+          nctx.fillRect(startX + x*cellSize+2, startY + y*cellSize+2, 4, cellSize-4);
+          nctx.globalAlpha=1;
+        }
+      }
+    }
+    nctx.restore();
+  }
+
+  function drawHold(){
+    hctx.clearRect(0,0,hcv.width,hcv.height);
+    if(holdType === null) return;
+    
+    const type = holdType;
+    const matrix = SHAPES[type];
+    const colorIndex = TYPE_INDEX[type];
+    const size = 120; // Canvas boyutu
+    const cellSize = SIZE * 0.7; // Yan panel için daha küçük boyut
+    const w = matrix[0].length;
+    const h = matrix.length;
+    
+    // Parçayı ortalamak için başlangıç koordinatları
+    let startX = (size - w * cellSize) / 2;
+    let startY = (size - h * cellSize) / 2;
+    
+    // I parçası için dikey ortalamayı iyileştirme
+    if(type === 'I'){
+        startY += cellSize/2; 
+    } else if (w < 4 && h < 4){
+        // Diğer parçalar (3x3 matrisler) için hafif yukarı kaydırma
+        startY -= cellSize/4;
+    }
+    
+    hctx.save();
+    for(let y=0;y<h;y++) {
+      for(let x=0;x<w;x++) {
+        if(matrix[y][x]) {
+          const color=COLORS[colorIndex];
+          hctx.fillStyle=color; 
+          hctx.fillRect(startX + x*cellSize+1, startY + y*cellSize+1, cellSize-2, cellSize-2);
+          
+          // Işık efekti (küçültülmüş)
+          hctx.globalAlpha=0.6; hctx.fillStyle='rgba(255,255,255,0.12)';
+          hctx.fillRect(startX + x*cellSize+2, startY + y*cellSize+2, cellSize-4, 4);
+          hctx.fillRect(startX + x*cellSize+2, startY + y*cellSize+2, 4, cellSize-4);
+          hctx.globalAlpha=1;
+        }
+      }
+    }
+    hctx.restore();
+  }
+
 
   function levelToMs(l){return Math.max(60,Math.floor(1000*Math.pow(0.85,l-1)));}
   function createMatrix(w,h){const m=[];while(h--) m.push(new Array(w).fill(0));return m;}
@@ -144,7 +236,30 @@
   function softDrop(){if(!collide(grid,{...piece,y:piece.y+1})){piece.y++;score+=1;}else lockPiece();}
   function ghostDrop(){let y=piece.y;while(!collide(grid,{...piece,y:y+1})) y++;return y;}
 
-  function lockPiece(){merge(grid,piece);clearLines();if(grid[0].some(v=>v!==0)){gameOver=true;}else{piece=spawn();}updateSidebar();if(gameOver){paused=true;drawBoard();ctx.fillStyle='rgba(0,0,0,.55)';ctx.fillRect(0,0,board.width,board.height);ctx.fillStyle='#fff';ctx.font='bold 20px system-ui';ctx.textAlign='center';ctx.fillText('Oyun Bitti',board.width/2,board.height/2-8);ctx.font='14px system-ui';ctx.fillText('Yalçın sana gülüyor',board.width/2,board.height/2+16);}}
+  function lockPiece(){merge(grid,piece);clearLines();
+    // Oyun bitiş kontrolü: en üst sıranın dolu olup olmadığı
+    if(grid[0].some(v=>v!==0)){
+      gameOver=true;
+    }else{
+      piece=spawn();
+    }
+    
+    updateSidebar();
+    
+    if(gameOver){
+      paused=true;
+      drawBoard();
+      ctx.fillStyle='rgba(0,0,0,.55)';
+      ctx.fillRect(0,0,board.width,board.height);
+      ctx.fillStyle='#fff';
+      ctx.font='bold 20px system-ui';
+      ctx.textAlign='center';
+      ctx.fillText('Oyun Bitti',board.width/2,board.height/2-8);
+      ctx.font='14px system-ui';
+      /* İstenen metin zaten mevcuttu */
+      ctx.fillText('Yalçın sana gülüyor',board.width/2,board.height/2+16);
+    }
+  }
 
   function tryRotate(dir){if(piece.type==='O') return;const rotated=rotate(piece.matrix,dir);const kicks=[0,-1,1,-2,2];for(const dx of kicks){const test={...piece,matrix:rotated,x:piece.x+dx};if(!collide(grid,test)){piece.matrix=rotated;piece.x+=dx;return;}}}
 
