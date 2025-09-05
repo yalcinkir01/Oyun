@@ -1,0 +1,439 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Tetris – Tek Dosya</title>
+  <style>
+    :root{
+      --bg:#0b1020; --panel:#0f1730; --text:#e7eefc; --sub:#9fb0d6;
+      --grid:#1b2342; --ghost:#3a4a88;
+      --c1:#00d8ff; /* I */
+      --c2:#005eff; /* J */
+      --c3:#ff9900; /* L */
+      --c4:#ffe100; /* O */
+      --c5:#00d070; /* S */
+      --c6:#b000ff; /* T */
+      --c7:#ff2f4a; /* Z */
+    }
+    *{box-sizing:border-box}
+    body{margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,'Helvetica Neue',Arial; background: radial-gradient(1200px 600px at 20% 0%, #121a35, #090d1a 60%), var(--bg); color:var(--text); display:grid; place-items:center; min-height:100vh}
+    .wrap{display:flex; gap:16px; padding:20px; background:linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02)); border:1px solid #222a4d; border-radius:18px; box-shadow:0 10px 30px rgba(0,0,0,.4)}
+    .side{width:180px; display:flex; flex-direction:column; gap:12px}
+    .panel{background:var(--panel); border:1px solid #1f2750; border-radius:14px; padding:12px}
+    h1{font-size:18px; margin:0 0 8px; font-weight:700}
+    .meta{display:grid; grid-template-columns:1fr auto; gap:6px; color:var(--sub); font-size:14px}
+    canvas{display:block; background:linear-gradient(180deg,#0e1530,#0a1127); border:1px solid #1e2750; border-radius:12px}
+    #board{image-rendering: pixelated;}
+    .keys{font-size:12px; color:#c8d3f0; line-height:1.5}
+    .keys kbd{background:#1b2346; border:1px solid #2a3570; border-bottom-color:#1a2450; padding:2px 6px; border-radius:6px; font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size:11px; color:#eaf1ff}
+    .btns{display:flex; gap:8px; margin-top:6px}
+    button{cursor:pointer; background:#1b2450; color:#eaf1ff; border:1px solid #2a3778; border-radius:10px; padding:8px 10px; font-weight:600}
+    button:hover{filter:brightness(1.15)}
+    @media(max-width:860px){.wrap{flex-direction:column; align-items:center}.side{width:100%; max-width:420px}}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="panel" style="padding:14px">
+      <canvas id="board" width="240" height="480" aria-label="Tetris oyun tahtası"></canvas>
+    </div>
+    <div class="side">
+      <div class="panel">
+        <h1>Skor</h1>
+        <div class="meta">
+          <div>Skor</div><div id="score">0</div>
+          <div>Satır</div><div id="lines">0</div>
+          <div>Seviye</div><div id="level">1</div>
+        </div>
+        <div class="btns">
+          <button id="restart" title="Yeniden başlat (R)">Yeniden</button>
+          <button id="pause" title="Duraklat / Sürdür (P)">Dur/Pla</button>
+        </div>
+      </div>
+      <div class="panel">
+        <h1>Sıradaki</h1>
+        <canvas id="next" width="120" height="120"></canvas>
+      </div>
+      <div class="panel">
+        <h1>Beklet</h1>
+        <canvas id="hold" width="120" height="120"></canvas>
+      </div>
+      <div class="panel keys">
+        <h1>Kontroller</h1>
+        <div><kbd>←</kbd>/<kbd>→</kbd> hareket</div>
+        <div><kbd>↓</kbd> yumuşak düşüş</div>
+        <div><kbd>↑</kbd> döndür (sağ)</div>
+        <div><kbd>Z</kbd> döndür (sol)</div>
+        <div><kbd>Space</kbd> sert düşüş</div>
+        <div><kbd>C</kbd> beklet/geri al</div>
+        <div><kbd>P</kbd> duraklat · <kbd>R</kbd> yeniden</div>
+      </div>
+    </div>
+  </div>
+
+<script>
+(() => {
+  // Boyutlar
+  const COLS = 10, ROWS = 20, SIZE = 24; // 10x20, 24px blok
+  const board = document.getElementById('board');
+  const ncv = document.getElementById('next');
+  const hcv = document.getElementById('hold');
+  const ctx = board.getContext('2d');
+  const nctx = ncv.getContext('2d');
+  const hctx = hcv.getContext('2d');
+
+  // Renkler index -> CSS variable
+  const COLORS = [null, 'var(--c1)','var(--c2)','var(--c3)','var(--c4)','var(--c5)','var(--c6)','var(--c7)'];
+  const TYPE_INDEX = {I:1,J:2,L:3,O:4,S:5,T:6,Z:7};
+
+  // Parçalar (temel matrisler)
+  const SHAPES = {
+    I: [
+      [0,0,0,0],
+      [1,1,1,1],
+      [0,0,0,0],
+      [0,0,0,0],
+    ],
+    J: [
+      [2,0,0],
+      [2,2,2],
+      [0,0,0],
+    ],
+    L: [
+      [0,0,3],
+      [3,3,3],
+      [0,0,0],
+    ],
+    O: [
+      [4,4],
+      [4,4],
+    ],
+    S: [
+      [0,5,5],
+      [5,5,0],
+      [0,0,0],
+    ],
+    T: [
+      [0,6,0],
+      [6,6,6],
+      [0,0,0],
+    ],
+    Z: [
+      [7,7,0],
+      [0,7,7],
+      [0,0,0],
+    ],
+  };
+
+  // Oyun durumu
+  let grid = createMatrix(COLS, ROWS);
+  let score = 0, lines = 0, level = 1;
+  let bag = [];
+  let nextQueue = [];
+  let holdType = null;
+  let holdLocked = false;
+
+  let piece = spawn();
+  let last = 0; // zaman damgası
+  let dropInterval = levelToMs(level);
+  let dropCounter = 0;
+  let paused = false;
+  let gameOver = false;
+
+  // Çizim stili
+  function clearBoard() {
+    // Arkaplan ve ızgara
+    ctx.clearRect(0,0,board.width,board.height);
+    ctx.fillStyle = '#0a1127';
+    ctx.fillRect(0,0,board.width,board.height);
+    // Izgara çizgileri
+    ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--grid');
+    ctx.lineWidth = 1;
+    for(let x=0;x<=COLS;x++){
+      ctx.beginPath(); ctx.moveTo(x*SIZE+0.5,0); ctx.lineTo(x*SIZE+0.5,ROWS*SIZE); ctx.stroke();
+    }
+    for(let y=0;y<=ROWS;y++){
+      ctx.beginPath(); ctx.moveTo(0,y*SIZE+0.5); ctx.lineTo(COLS*SIZE,y*SIZE+0.5); ctx.stroke();
+    }
+  }
+
+  function drawCell(c, x, y, colorIndex, alpha=1){
+    const color = COLORS[colorIndex];
+    if(!color) return;
+    c.save(); c.globalAlpha = alpha; c.fillStyle = color; c.fillRect(x*SIZE+1, y*SIZE+1, SIZE-2, SIZE-2);
+    // parlak üst sol
+    c.globalAlpha = alpha*0.6; c.fillStyle = 'rgba(255,255,255,0.12)';
+    c.fillRect(x*SIZE+2, y*SIZE+2, SIZE-4, 6);
+    c.fillRect(x*SIZE+2, y*SIZE+2, 6, SIZE-4);
+    c.restore();
+  }
+
+  function drawBoard(){
+    clearBoard();
+    // Hayalet parça
+    const ghostY = ghostDrop();
+    for(let y=0; y<piece.matrix.length; y++){
+      for(let x=0; x<piece.matrix[y].length; x++){
+        if(piece.matrix[y][x]){
+          const gx = piece.x + x;
+          const gy = ghostY + y;
+          if(gy>=0) drawCell(ctx, gx, gy, piece.colorIndex, 0.25);
+        }
+      }
+    }
+    // Sabitlenmiş bloklar
+    for(let y=0;y<ROWS;y++){
+      for(let x=0;x<COLS;x++){
+        if(grid[y][x]) drawCell(ctx,x,y,grid[y][x]);
+      }
+    }
+    // Aktif parça
+    for(let y=0; y<piece.matrix.length; y++){
+      for(let x=0; x<piece.matrix[y].length; x++){
+        if(piece.matrix[y][x]){
+          const px = piece.x + x; const py = piece.y + y;
+          if(py>=0) drawCell(ctx, px, py, piece.colorIndex);
+        }
+      }
+    }
+  }
+
+  function drawPreview(c, type){
+    c.clearRect(0,0,c.canvas.width,c.canvas.height);
+    if(!type) return;
+    const m = clone(SHAPES[type]);
+    const bs = 20; // küçük kutu
+    const color = TYPE_INDEX[type];
+    // Merkezde göster
+    const w = m[0].length, h = m.length;
+    const offx = Math.floor((c.canvas.width - w*bs)/2);
+    const offy = Math.floor((c.canvas.height - h*bs)/2);
+    for(let y=0;y<h;y++){
+      for(let x=0;x<w;x++){
+        if(m[y][x]){
+          c.save(); c.fillStyle = getComputedStyle(document.documentElement).getPropertyValue(COLORS[color].replace('var',''));
+          c.fillStyle = getComputedStyle(document.documentElement).getPropertyValue(COLORS[color].slice(4,-1));
+          // Fallback: use computed style through main drawCell for consistency
+          c.restore();
+        }
+      }
+    }
+    // Kullan: draw-like
+    const drawMini = (cx,cy,ci)=>{
+      const color = COLORS[ci];
+      c.save(); c.fillStyle = color; c.fillRect(offx+cx*bs+1, offy+cy*bs+1, bs-2, bs-2);
+      c.globalAlpha=.6; c.fillStyle='rgba(255,255,255,.12)';
+      c.fillRect(offx+cx*bs+2, offy+cy*bs+2, bs-4, 5);
+      c.fillRect(offx+cx*bs+2, offy+cy*bs+2, 5, bs-4);
+      c.restore();
+    };
+    for(let y=0;y<m.length;y++) for(let x=0;x<m[0].length;x++) if(m[y][x]) drawMini(x,y, TYPE_INDEX[type]);
+  }
+
+  function updateSidebar(){
+    document.getElementById('score').textContent = score;
+    document.getElementById('lines').textContent = lines;
+    document.getElementById('level').textContent = level;
+    drawPreview(nctx, nextQueue[0]);
+    drawPreview(hctx, holdType);
+  }
+
+  function levelToMs(l){
+    // Klasik düşüş hızı: yaklaşık 1000 * 0.85^(l-1)
+    return Math.max(60, Math.floor(1000 * Math.pow(0.85, l-1)));
+  }
+
+  function createMatrix(w,h){
+    const m = [];
+    while(h--) m.push(new Array(w).fill(0));
+    return m;
+  }
+
+  function rotate(mat, dir){
+    const N = mat.length; // NxN
+    const res = createMatrix(N,N);
+    for(let y=0;y<N;y++) for(let x=0;x<N;x++) {
+      res[y][x] = dir>0 ? mat[N-1-x][y] : mat[x][N-1-y];
+    }
+    return res;
+  }
+
+  function collide(grid, p){
+    const m = p.matrix;
+    for(let y=0;y<m.length;y++){
+      for(let x=0;x<m[y].length;x++){
+        if(!m[y][x]) continue;
+        const nx = p.x + x;
+        const ny = p.y + y;
+        if(nx < 0 || nx >= COLS || ny >= ROWS || (ny>=0 && grid[ny][nx])) return true;
+      }
+    }
+    return false;
+  }
+
+  function merge(grid, p){
+    const m = p.matrix;
+    for(let y=0;y<m.length;y++) for(let x=0;x<m[y].length;x++) if(m[y][x]){
+      const ny = p.y + y; const nx = p.x + x; if(ny>=0) grid[ny][nx] = p.colorIndex;
+    }
+  }
+
+  function clearLines(){
+    let cleared = 0;
+    outer: for(let y=ROWS-1;y>=0;y--){
+      for(let x=0;x<COLS;x++) if(!grid[y][x]) { continue outer; }
+      // dolu satır
+      const row = grid.splice(y,1)[0].fill(0);
+      grid.unshift(row);
+      cleared++; y++;
+    }
+    if(cleared){
+      const pts = [0,100,300,500,800][cleared] * level;
+      score += pts;
+      lines += cleared;
+      const nlevel = 1 + Math.floor(lines/10);
+      if(nlevel !== level){ level = nlevel; dropInterval = levelToMs(level); }
+    }
+  }
+
+  function newBag(){
+    const types = ['I','J','L','O','S','T','Z'];
+    for(let i=types.length-1;i>0;i--){
+      const j = Math.floor(Math.random()*(i+1)); [types[i],types[j]] = [types[j],types[i]];
+    }
+    return types;
+  }
+
+  function refillQueue(){
+    if(bag.length===0) bag = newBag();
+    while(nextQueue.length<5){
+      if(bag.length===0) bag = newBag();
+      nextQueue.push(bag.pop());
+    }
+  }
+
+  function spawn(){
+    refillQueue();
+    const type = nextQueue.shift();
+    const base = clone(SHAPES[type]);
+    const colorIndex = TYPE_INDEX[type];
+    const p = {type, matrix: base, x: 3, y: -2, colorIndex};
+    // adjust x for I/O width
+    const w = p.matrix[0].length;
+    p.x = Math.floor((COLS - w)/2);
+    holdLocked = false;
+    if(collide(grid,p)){ gameOver = true; }
+    return p;
+  }
+
+  function clone(m){ return m.map(r=>r.slice()); }
+
+  function hardDrop(){
+    let dist = 0;
+    while(!collide(grid, {...piece, y: piece.y+1})) { piece.y++; dist++; }
+    score += dist*2; // hard drop puanı
+    lockPiece();
+  }
+
+  function softDrop(){
+    if(!collide(grid, {...piece, y: piece.y+1})) { piece.y++; score += 1; }
+    else lockPiece();
+  }
+
+  function ghostDrop(){
+    let y = piece.y;
+    while(!collide(grid, {...piece, y:y+1})) y++;
+    return y;
+  }
+
+  function lockPiece(){
+    merge(grid, piece);
+    clearLines();
+    piece = spawn();
+    updateSidebar();
+    if(gameOver) {
+      paused = true; drawBoard();
+      ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.fillRect(0,0,board.width,board.height);
+      ctx.fillStyle = '#fff'; ctx.font = 'bold 20px system-ui'; ctx.textAlign='center';
+      ctx.fillText('Oyun Bitti', board.width/2, board.height/2 - 8);
+      ctx.font = '14px system-ui'; ctx.fillText('R: yeniden başlat', board.width/2, board.height/2 + 16);
+    }
+  }
+
+  function tryRotate(dir){
+    if(piece.type==='O') return; // O dönmez
+    const rotated = rotate(piece.matrix, dir);
+    const kicks = [0,-1,1,-2,2];
+    for(const dx of kicks){
+      const test = { ...piece, matrix: rotated, x: piece.x + dx };
+      if(!collide(grid,test)){ piece.matrix = rotated; piece.x += dx; return; }
+    }
+  }
+
+  // Ana döngü
+  function update(time=0){
+    if(paused) { requestAnimationFrame(update); return; }
+    const dt = time - last; last = time;
+    dropCounter += dt;
+    if(dropCounter > dropInterval){ dropCounter = 0; softDrop(); }
+    drawBoard();
+    requestAnimationFrame(update);
+  }
+
+  // Girdi
+  document.addEventListener('keydown', (e)=>{
+    if(gameOver && e.key.toLowerCase()!=='r') return;
+    switch(e.key){
+      case 'ArrowLeft': {
+        const t = { ...piece, x: piece.x-1 }; if(!collide(grid,t)) piece.x--; break;
+      }
+      case 'ArrowRight': {
+        const t = { ...piece, x: piece.x+1 }; if(!collide(grid,t)) piece.x++; break;
+      }
+      case 'ArrowDown': softDrop(); break;
+      case 'ArrowUp': tryRotate(1); break; // CW
+      case 'z': case 'Z': tryRotate(-1); break; // CCW
+      case ' ': e.preventDefault(); hardDrop(); break;
+      case 'c': case 'C': hold(); break;
+      case 'p': case 'P': togglePause(); break;
+      case 'r': case 'R': restart(); break;
+    }
+  });
+
+  document.getElementById('pause').onclick = togglePause;
+  document.getElementById('restart').onclick = restart;
+
+  function togglePause(){ if(gameOver) return; paused = !paused; }
+
+  function restart(){
+    grid = createMatrix(COLS, ROWS);
+    score = 0; lines = 0; level = 1; dropInterval = levelToMs(level);
+    bag = []; nextQueue = []; holdType = null; holdLocked=false; gameOver=false; paused=false;
+    piece = spawn();
+    updateSidebar();
+  }
+
+  function hold(){
+    if(holdLocked) return;
+    const cur = piece.type;
+    if(holdType==null){ holdType = cur; piece = spawn(); }
+    else { const swap = holdType; holdType = cur; piece = makePieceFromType(swap); }
+    holdLocked = true; updateSidebar();
+  }
+
+  function makePieceFromType(type){
+    const base = clone(SHAPES[type]);
+    const colorIndex = TYPE_INDEX[type];
+    const p = {type, matrix: base, x: Math.floor((COLS - base[0].length)/2), y: -2, colorIndex};
+    if(collide(grid,p)){ gameOver = true; }
+    return p;
+  }
+
+  // Başlat
+  updateSidebar();
+  update(0);
+})();
+</script>
+</body>
+</html>
