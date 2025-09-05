@@ -209,8 +209,12 @@
     document.getElementById('title').textContent = title;
     document.getElementById('subtitle').textContent = subtitle;
     msg.hidden = false;
+    msg.style.display = 'flex';
   }
-  function hideMsg(){ msg.hidden = true; }
+  function hideMsg(){
+    msg.hidden = true;
+    msg.style.display = 'none';
+  }
 
   function start() {
     reset();
@@ -221,19 +225,20 @@
   }
 
   const onDown = (e) => { touching = true; e.preventDefault(); };
-  const onUp = (e) => { touching = false; if (!running) start(); };
+  const onUp = (e) => { touching = false; if (!running) { hideMsg(); start(); } };
   canvas.addEventListener('pointerdown', onDown);
   canvas.addEventListener('pointerup', onUp);
   canvas.addEventListener('pointercancel', onUp);
   canvas.addEventListener('pointerleave', (e)=>{ touching=false;});
 
-  startBtn.addEventListener('click', start);
+  startBtn.addEventListener('click', () => { hideMsg(); start(); });
 
   // Space tuşu ile kontrol
   window.addEventListener('keydown', (e) => {
     if (e.code === 'Space') {
       e.preventDefault();
       if (!running) {
+        hideMsg();
         start();
       }
       BIRD.vy = LIFT * 0.5;
