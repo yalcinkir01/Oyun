@@ -16,12 +16,29 @@
       --c6:#3366cc; /* T */
       --c7:#0033ff; /* Z */
     }
-    body{margin:0; background:var(--bg); color:var(--text); display:grid; place-items:center; min-height:100vh; font-family:sans-serif}
+    body{margin:0; font-family:sans-serif; background:var(--bg); color:var(--text); display:grid; place-items:center; min-height:100vh}
+    .wrap{display:flex; gap:16px; padding:20px}
     canvas{background:#111831; border:2px solid #222; border-radius:8px; image-rendering:pixelated}
+    .side{width:200px; display:flex; flex-direction:column; gap:12px}
+    .panel{background:var(--panel); border:1px solid #1f2750; border-radius:14px; padding:12px}
+    h1{font-size:16px; margin:0 0 8px}
+    .keys{font-size:12px; color:#c8d3f0; line-height:1.5}
+    .keys kbd{background:#1b2346; border:1px solid #2a3570; padding:2px 6px; border-radius:4px; font-family:monospace; font-size:11px; color:#eaf1ff}
   </style>
 </head>
 <body>
-  <canvas id="board" width="240" height="480"></canvas>
+  <div class="wrap">
+    <canvas id="board" width="240" height="480"></canvas>
+    <div class="side">
+      <div class="panel keys">
+        <h1>Kontroller</h1>
+        <div><kbd>←</kbd>/<kbd>→</kbd> hareket</div>
+        <div><kbd>↓</kbd> yumuşak düşüş</div>
+        <div><kbd>↑</kbd> döndür</div>
+        <div><kbd>Space</kbd> sert düşüş</div>
+      </div>
+    </div>
+  </div>
   <script>
   const COLS=10,ROWS=20,SIZE=24;
   const canvas=document.getElementById('board');
@@ -42,9 +59,7 @@
     const t=types[Math.floor(Math.random()*types.length)];
     const matrix=clone(SHAPES[t]);
     const p={matrix,colorIndex:TYPE_INDEX[t],x:3,y:-2};
-    if(collide(grid,p)){
-      gameOver=true;
-    }
+    if(collide(grid,p)) gameOver=true;
     return p;
   }
   function collide(grid,p){
@@ -60,9 +75,7 @@
   }
   function merge(grid,p){
     p.matrix.forEach((row,y)=>row.forEach((v,x)=>{
-      if(v){
-        if(p.y+y>=0) grid[p.y+y][p.x+x]=p.colorIndex;
-      }
+      if(v){ if(p.y+y>=0) grid[p.y+y][p.x+x]=p.colorIndex; }
     }));
   }
   function clearLines(){
@@ -91,8 +104,7 @@
   function drawCell(x,y,c){
     ctx.fillStyle=getComputedStyle(document.documentElement).getPropertyValue(c).trim();
     ctx.fillRect(x*SIZE,y*SIZE,SIZE,SIZE);
-    ctx.strokeStyle="#000";
-    ctx.lineWidth=1;
+    ctx.strokeStyle="#000"; ctx.lineWidth=1;
     ctx.strokeRect(x*SIZE,y*SIZE,SIZE,SIZE);
   }
   function draw(){
@@ -120,18 +132,19 @@
     }
   }
   function update(t=0){
-    const dt=t-last;last=t;dropCounter+=dt;
-    if(dropCounter>dropInterval){drop();dropCounter=0;}
+    const dt=t-last; last=t; dropCounter+=dt;
+    if(dropCounter>dropInterval){drop(); dropCounter=0;}
     draw();
     requestAnimationFrame(update);
   }
   document.addEventListener('keydown',e=>{
-    if(gameOver)return;
+    if(gameOver) return;
     switch(e.key){
-      case'ArrowLeft':piece.x--;if(collide(grid,piece))piece.x++;break;
-      case'ArrowRight':piece.x++;if(collide(grid,piece))piece.x--;break;
-      case'ArrowDown':drop();break;
-      case'ArrowUp':const r=rotate(piece.matrix);const old=piece.matrix;piece.matrix=r;if(collide(grid,piece))piece.matrix=old;break;
+      case 'ArrowLeft': piece.x--; if(collide(grid,piece)) piece.x++; break;
+      case 'ArrowRight': piece.x++; if(collide(grid,piece)) piece.x--; break;
+      case 'ArrowDown': drop(); break;
+      case 'ArrowUp': const r=rotate(piece.matrix); const old=piece.matrix; piece.matrix=r; if(collide(grid,piece)) piece.matrix=old; break;
+      case ' ': while(!collide(grid,{...piece,y:piece.y+1})) piece.y++; drop(); break;
     }
   });
   update();
