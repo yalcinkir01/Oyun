@@ -3,18 +3,18 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Tetris – Düzeltilmiş</title>
+  <title>Tetris – Mavi Bloklar</title>
   <style>
     :root{
       --bg:#0b1020; --panel:#0f1730; --text:#e7eefc; --sub:#9fb0d6;
       --grid:#1b2342; --ghost:#3a4a88;
-      --c1:#00f0ff; /* I */
-      --c2:#0040ff; /* J */
-      --c3:#ff8000; /* L */
-      --c4:#ffe600; /* O */
-      --c5:#00cc55; /* S */
-      --c6:#a000ff; /* T */
-      --c7:#ff0033; /* Z */
+      --c1:#3399ff; /* I */
+      --c2:#0066ff; /* J */
+      --c3:#0044cc; /* L */
+      --c4:#1a75ff; /* O */
+      --c5:#3385ff; /* S */
+      --c6:#3366cc; /* T */
+      --c7:#0033ff; /* Z */
     }
     body{margin:0; background:var(--bg); color:var(--text); display:grid; place-items:center; min-height:100vh; font-family:sans-serif}
     canvas{background:#111831; border:2px solid #222; border-radius:8px; image-rendering:pixelated}
@@ -37,16 +37,103 @@
 
   function createMatrix(w,h){const m=[];while(h--)m.push(new Array(w).fill(0));return m;}
   function clone(m){return m.map(r=>r.slice());}
-  function spawn(){const types=Object.keys(SHAPES);const t=types[Math.floor(Math.random()*types.length)];const matrix=clone(SHAPES[t]);const p={matrix,colorIndex:TYPE_INDEX[t],x:3,y:-2};if(collide(grid,p)){gameOver=true;}return p;}
-  function collide(grid,p){for(let y=0;y<p.matrix.length;y++){for(let x=0;x<p.matrix[y].length;x++){if(p.matrix[y][x]){const nx=p.x+x,ny=p.y+y;if(nx<0||nx>=COLS||ny>=ROWS||(ny>=0&&grid[ny][nx]))return true;}}}return false;}
-  function merge(grid,p){p.matrix.forEach((row,y)=>row.forEach((v,x)=>{if(v){if(p.y+y>=0)grid[p.y+y][p.x+x]=p.colorIndex;}}));}
-  function clearLines(){for(let y=ROWS-1;y>=0;y--){if(grid[y].every(v=>v!==0)){grid.splice(y,1);grid.unshift(new Array(COLS).fill(0));y++;}}}
+  function spawn(){
+    const types=Object.keys(SHAPES);
+    const t=types[Math.floor(Math.random()*types.length)];
+    const matrix=clone(SHAPES[t]);
+    const p={matrix,colorIndex:TYPE_INDEX[t],x:3,y:-2};
+    if(collide(grid,p)){
+      gameOver=true;
+    }
+    return p;
+  }
+  function collide(grid,p){
+    for(let y=0;y<p.matrix.length;y++){
+      for(let x=0;x<p.matrix[y].length;x++){
+        if(p.matrix[y][x]){
+          const nx=p.x+x,ny=p.y+y;
+          if(nx<0||nx>=COLS||ny>=ROWS||(ny>=0&&grid[ny][nx])) return true;
+        }
+      }
+    }
+    return false;
+  }
+  function merge(grid,p){
+    p.matrix.forEach((row,y)=>row.forEach((v,x)=>{
+      if(v){
+        if(p.y+y>=0) grid[p.y+y][p.x+x]=p.colorIndex;
+      }
+    }));
+  }
+  function clearLines(){
+    for(let y=ROWS-1;y>=0;y--){
+      if(grid[y].every(v=>v!==0)){
+        grid.splice(y,1);
+        grid.unshift(new Array(COLS).fill(0));
+        y++;
+      }
+    }
+  }
   function rotate(m){return m[0].map((_,i)=>m.map(r=>r[i]).reverse());}
-  function drop(){piece.y++;if(collide(grid,piece)){piece.y--;merge(grid,piece);clearLines();piece=spawn();if(collide(grid,piece)){gameOver=true;}}}
-  function drawCell(x,y,c){ctx.fillStyle=getComputedStyle(document.documentElement).getPropertyValue(c);ctx.fillRect(x*SIZE,y*SIZE,SIZE,SIZE);ctx.strokeStyle="#000";ctx.strokeRect(x*SIZE,y*SIZE,SIZE,SIZE);}
-  function draw(){ctx.fillStyle="#111831";ctx.fillRect(0,0,canvas.width,canvas.height);for(let y=0;y<ROWS;y++){for(let x=0;x<COLS;x++){if(grid[y][x])drawCell(x,y,COLORS[grid[y][x]]);}}piece.matrix.forEach((row,dy)=>row.forEach((v,dx)=>{if(v){const px=piece.x+dx,py=piece.y+dy;if(py>=0)drawCell(px,py,COLORS[piece.colorIndex]);}}));if(gameOver){ctx.fillStyle="rgba(0,0,0,0.7)";ctx.fillRect(0,0,canvas.width,canvas.height);ctx.fillStyle="#fff";ctx.font="20px sans-serif";ctx.textAlign="center";ctx.fillText("Oyun Bitti",canvas.width/2,canvas.height/2 - 15);ctx.fillText("Yalçın sana gülüyor",canvas.width/2,canvas.height/2 + 15);}}
-  function update(t=0){const dt=t-last;last=t;dropCounter+=dt;if(dropCounter>dropInterval){drop();dropCounter=0;}draw();requestAnimationFrame(update);}
-  document.addEventListener('keydown',e=>{if(gameOver)return;switch(e.key){case'ArrowLeft':piece.x--;if(collide(grid,piece))piece.x++;break;case'ArrowRight':piece.x++;if(collide(grid,piece))piece.x--;break;case'ArrowDown':drop();break;case'ArrowUp':const r=rotate(piece.matrix);const old=piece.matrix;piece.matrix=r;if(collide(grid,piece))piece.matrix=old;break;}});
+  function drop(){
+    piece.y++;
+    if(collide(grid,piece)){
+      piece.y--;
+      merge(grid,piece);
+      clearLines();
+      if(grid[0].some(v=>v!==0)){
+        gameOver=true;
+      } else {
+        piece=spawn();
+      }
+    }
+  }
+  function drawCell(x,y,c){
+    ctx.fillStyle=getComputedStyle(document.documentElement).getPropertyValue(c).trim();
+    ctx.fillRect(x*SIZE,y*SIZE,SIZE,SIZE);
+    ctx.strokeStyle="#000";
+    ctx.lineWidth=1;
+    ctx.strokeRect(x*SIZE,y*SIZE,SIZE,SIZE);
+  }
+  function draw(){
+    ctx.fillStyle="#111831";
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+    for(let y=0;y<ROWS;y++){
+      for(let x=0;x<COLS;x++){
+        if(grid[y][x]) drawCell(x,y,COLORS[grid[y][x]]);
+      }
+    }
+    piece.matrix.forEach((row,dy)=>row.forEach((v,dx)=>{
+      if(v){
+        const px=piece.x+dx,py=piece.y+dy;
+        if(py>=0) drawCell(px,py,COLORS[piece.colorIndex]);
+      }
+    }));
+    if(gameOver){
+      ctx.fillStyle="rgba(0,0,0,0.7)";
+      ctx.fillRect(0,0,canvas.width,canvas.height);
+      ctx.fillStyle="#fff";
+      ctx.font="20px sans-serif";
+      ctx.textAlign="center";
+      ctx.fillText("Oyun Bitti",canvas.width/2,canvas.height/2 - 15);
+      ctx.fillText("Yalçın sana gülüyor",canvas.width/2,canvas.height/2 + 15);
+    }
+  }
+  function update(t=0){
+    const dt=t-last;last=t;dropCounter+=dt;
+    if(dropCounter>dropInterval){drop();dropCounter=0;}
+    draw();
+    requestAnimationFrame(update);
+  }
+  document.addEventListener('keydown',e=>{
+    if(gameOver)return;
+    switch(e.key){
+      case'ArrowLeft':piece.x--;if(collide(grid,piece))piece.x++;break;
+      case'ArrowRight':piece.x++;if(collide(grid,piece))piece.x--;break;
+      case'ArrowDown':drop();break;
+      case'ArrowUp':const r=rotate(piece.matrix);const old=piece.matrix;piece.matrix=r;if(collide(grid,piece))piece.matrix=old;break;
+    }
+  });
   update();
   </script>
 </body>
