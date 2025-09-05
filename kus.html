@@ -27,9 +27,9 @@
 <div id="msg" hidden>
   <div class="card">
     <h1 id="title">Kuş Kaçış</h1>
-    <p id="subtitle">Ekrana dokun ve kuşu yükselt. Bırakınca alçalır. Engellere çarpma.</p>
+    <p id="subtitle">Ekrana dokun veya Space tuşuna bas. Kuş yükselir, bırakınca alçalır. Engellere çarpma.</p>
     <a class="btn" id="start">Başlat</a>
-    <small>Tek dokunuş kontrol • Mobil uyumlu</small>
+    <small>Tek dokunuş veya Space tuşu • Mobil uyumlu</small>
   </div>
 </div>
 <script>
@@ -42,7 +42,6 @@
   const startBtn = document.getElementById('start');
   const DPR = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
 
-  // Resize canvas to fit screen with DPR
   function fit() {
     const w = window.innerWidth;
     const h = window.innerHeight;
@@ -50,12 +49,11 @@
     canvas.style.height = h + 'px';
     canvas.width = Math.floor(w * DPR);
     canvas.height = Math.floor(h * DPR);
-    ctx.setTransform(DPR, 0, 0, DPR, 0, 0); // draw in CSS pixels
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   }
   window.addEventListener('resize', fit, {passive:true});
   fit();
 
-  // Game state
   let running = false;
   let over = false;
   let tPrev = 0;
@@ -63,16 +61,16 @@
   let best = Number(localStorage.getItem('bird_best') || 0);
   bestEl.textContent = 'En İyi: ' + best;
 
-  const G = 1600;         // gravity px/s^2
-  const LIFT = -900;      // impulse when touching
-  const MAX_VY = 900;     // clamp
+  const G = 1600;
+  const LIFT = -900;
+  const MAX_VY = 900;
   const BIRD = { x: 0, y: 0, r: 16, vy: 0 };
   const PIPES = [];
-  const GAP_MIN = 140;    // px gap in CSS pixels
+  const GAP_MIN = 140;
   const GAP_MAX = 200;
   const PIPE_W = 64;
-  const PIPE_SPACING = 1.7; // seconds between spawns
-  const SPEED = 220;        // pipe speed px/s
+  const PIPE_SPACING = 1.7;
+  const SPEED = 220;
   let spawnTimer = 0;
   let touching = false;
 
@@ -99,34 +97,28 @@
   function rand(a,b){return Math.random()*(b-a)+a}
 
   function update(dt) {
-    // Bird physics
-    const ay = G * dt * (touching ? 0.35 : 1); // dokunurken daha yumuşak düşüş
+    const ay = G * dt * (touching ? 0.35 : 1);
     if (touching) {
-      BIRD.vy += LIFT * dt; // sürekli dokunuyorsa yukarı ivme
+      BIRD.vy += LIFT * dt;
     }
     BIRD.vy += ay;
     BIRD.vy = Math.max(-MAX_VY, Math.min(MAX_VY, BIRD.vy));
     BIRD.y += BIRD.vy * dt;
 
-    // Borders
     const H = canvas.height / DPR;
     if (BIRD.y < BIRD.r) { BIRD.y = BIRD.r; BIRD.vy = 0; }
     if (BIRD.y > H - BIRD.r) { BIRD.y = H - BIRD.r; over = true; }
 
-    // Pipes
     spawnTimer -= dt;
     if (spawnTimer <= 0) { spawnPipe(); spawnTimer = PIPE_SPACING; }
 
     for (let i=PIPES.length-1;i>=0;i--) {
       const p = PIPES[i];
       p.x -= SPEED * dt;
-      // scoring
       if (!p.passed && p.x + p.w < BIRD.x - BIRD.r) {
         p.passed = true; score++; scoreEl.textContent = String(score);
       }
-      // remove offscreen
       if (p.x + p.w < -10) PIPES.splice(i,1);
-      // collision
       if (circleRectCollide(BIRD.x, BIRD.y, BIRD.r, p.x, 0, p.w, p.top) ||
           circleRectCollide(BIRD.x, BIRD.y, BIRD.r, p.x, p.bottom, p.w, H - p.bottom)) {
         over = true;
@@ -143,54 +135,39 @@
 
   function draw() {
     const W = canvas.width / DPR, H = canvas.height / DPR;
-    // background gradient is in CSS; add parallax hills
     ctx.clearRect(0,0,W,H);
 
-    // Parallax ground
     ctx.fillStyle = '#2f9e44';
     ctx.fillRect(0, H-80, W, 80);
-    ctx.fillStyle = '#228be6';
-    // score sky badge shadow already via UI
 
-    // Pipes
     for (const p of PIPES) {
-      // top
       ctx.fillStyle = '#1e293b';
       ctx.fillRect(p.x, 0, p.w, p.top);
-      // bottom
       ctx.fillRect(p.x, p.bottom, p.w, H - p.bottom);
-      // edges
       ctx.fillStyle = '#334155';
       ctx.fillRect(p.x, p.top-10, p.w, 10);
       ctx.fillRect(p.x, p.bottom, p.w, 10);
     }
 
-    // Bird
     drawBird(BIRD.x, BIRD.y, BIRD.r, touching);
-
-    // Ground line
     ctx.fillStyle = '#174e25';
     ctx.fillRect(0, H-80, W, 6);
   }
 
   function drawBird(x,y,r,flap) {
-    // simple stylized bird
     ctx.save();
     ctx.translate(x,y);
     const tilt = Math.max(-0.7, Math.min(0.7, BIRD.vy/500));
     ctx.rotate(tilt);
-    // body
     ctx.fillStyle = '#ffd43b';
     ctx.beginPath();
     ctx.ellipse(0,0,r*1.2,r,.0,0,Math.PI*2);
     ctx.fill();
-    // wing
     ctx.fillStyle = '#fab005';
     const wf = flap ? 1.0 : 0.0;
     ctx.beginPath();
     ctx.ellipse(-4, 2 - 6*wf, r*.7, r*.5, .2, 0, Math.PI*2);
     ctx.fill();
-    // eye
     ctx.fillStyle = '#000';
     ctx.beginPath();
     ctx.arc(r*0.6, -r*0.2, r*0.18, 0, Math.PI*2);
@@ -199,7 +176,6 @@
     ctx.beginPath();
     ctx.arc(r*0.62, -r*0.22, r*0.08, 0, Math.PI*2);
     ctx.fill();
-    // beak
     ctx.fillStyle = '#ff6b6b';
     ctx.beginPath();
     ctx.moveTo(r*1.2, 0);
@@ -223,7 +199,7 @@
       running = false;
       if (score > best) { best = score; localStorage.setItem('bird_best', String(best)); }
       bestEl.textContent = 'En İyi: ' + best;
-      showMsg('Oyun Bitti', 'Skor: ' + score + ' • Devam için dokun');
+      showMsg('Oyun Bitti', 'Skor: ' + score + ' • Devam için dokun veya Space');
       return;
     }
     requestAnimationFrame(loop);
@@ -244,7 +220,6 @@
     requestAnimationFrame(loop);
   }
 
-  // Input: touch and mouse
   const onDown = (e) => { touching = true; e.preventDefault(); };
   const onUp = (e) => { touching = false; if (!running) start(); };
   canvas.addEventListener('pointerdown', onDown);
@@ -254,8 +229,18 @@
 
   startBtn.addEventListener('click', start);
 
-  // First screen
-  showMsg('Kuş Kaçış', 'Ekrana dokun ve kuşu yükselt. Bırakınca alçalır. Engellere çarpma.');
+  // Space tuşu ile kontrol
+  window.addEventListener('keydown', (e) => {
+    if (e.code === 'Space') {
+      e.preventDefault();
+      if (!running) {
+        start();
+      }
+      BIRD.vy = LIFT * 0.5;
+    }
+  });
+
+  showMsg('Kuş Kaçış', 'Ekrana dokun veya Space tuşuna bas. Kuş yükselir, bırakınca alçalır. Engellere çarpma.');
 })();
 </script>
 </body>
