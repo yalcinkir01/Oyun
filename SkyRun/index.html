@@ -3,11 +3,12 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
-<title>Kuş Kaçış – Mobil HTML5 Oyun</title>
+<title>SkyRun – Mobil HTML5 Oyun</title>
 <link rel="manifest" href="./manifest.json">
 <meta name="theme-color" content="#0b0f19">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<link rel="apple-touch-icon" href="./icons/icon-192.png">
+<meta name="apple-mobile-web-app-title" content="SkyRun">
+<link rel="apple-touch-icon" href="./icons/icon-512.png">
 <link rel="icon" href="./icons/icon-192.png">
 <style>
   html,body{margin:0;height:100%;background:#0b0f19;color:#eaf2ff;font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial}
@@ -21,18 +22,21 @@
   #msg p{margin:.25rem 0 .5rem;opacity:.9}
   #msg .btn{display:inline-block;margin-top:.25rem;background:#18c964;color:#03120a;font-weight:800;border-radius:12px;padding:.6rem 1rem;cursor:pointer}
   #msg small{display:block;opacity:.8;margin-top:.35rem}
+  /* imza */
+  #sig{position:fixed;right:.8rem;bottom:.6rem;opacity:.8;font-size:.9rem}
 </style>
 </head>
 <body>
-<div id="wrap"><canvas id="game" width="480" height="800" aria-label="Kuş oyunu"></canvas></div>
+<div id="wrap"><canvas id="game" width="480" height="800" aria-label="SkyRun oyun"></canvas></div>
 <div id="ui">
   <span class="pill" id="score">0</span>
   <span class="pill" id="best">En İyi: 0</span>
 </div>
+<div id="sig">by <strong>Yalçın Kır</strong></div>
 <div id="msg" hidden>
   <div class="card">
-    <h1 id="title">Kuş Kaçış</h1>
-    <p id="subtitle">Ekrana dokun veya Space tuşuna bas. Kuş yükselir, bırakınca alçalır. Engellere çarpma.</p>
+    <h1 id="title">SkyRun</h1>
+    <p id="subtitle">Ekrana dokun veya Space tuşuna bas. Yüksel, bırakınca alçalır. Engellere çarpma.</p>
     <a class="btn" id="start">Başlat</a>
     <small>Tek dokunuş veya Space tuşu • Mobil uyumlu</small>
   </div>
@@ -63,7 +67,7 @@
   let over = false;
   let tPrev = 0;
   let score = 0;
-  let best = Number(localStorage.getItem('bird_best') || 0);
+  let best = Number(localStorage.getItem('skyrun_best') || 0);
   bestEl.textContent = 'En İyi: ' + best;
 
   const G = 1600;
@@ -201,7 +205,7 @@
 
     if (over) {
       running = false;
-      if (score > best) { best = score; localStorage.setItem('bird_best', String(best)); }
+      if (score > best) { best = score; localStorage.setItem('skyrun_best', String(best)); }
       bestEl.textContent = 'En İyi: ' + best;
       showMsg('Oyun Bitti', 'Skor: ' + score + ' • Devam için dokun veya Space');
       return;
@@ -263,7 +267,7 @@
     }
   });
 
-  showMsg('Kuş Kaçış', 'Ekrana dokun veya Space tuşuna bas. Kuş yükselir, bırakınca alçalır. Engellere çarpma.');
+  showMsg('SkyRun', 'Ekrana dokun veya Space tuşuna bas. Yüksel, bırakınca alçalır. Engellere çarpma.');
 
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
