@@ -229,12 +229,18 @@
     requestAnimationFrame(loop);
   }
 
-  const onDown = (e) => { touching = true; e.preventDefault(); };
+  const onDown = (e) => { touching = true; BIRD.vy += LIFT * 0.35; e.preventDefault(); };
   const onUp = (e) => { touching = false; if (!running) { hideMsg(); start(); } };
   canvas.addEventListener('pointerdown', onDown);
   canvas.addEventListener('pointerup', onUp);
   canvas.addEventListener('pointercancel', onUp);
   canvas.addEventListener('pointerleave', (e)=>{ touching=false;});
+
+  // Dokunma ve fare için açıkça fallback ekle
+  canvas.addEventListener('touchstart', onDown, {passive:false});
+  canvas.addEventListener('touchend', onUp, {passive:false});
+  canvas.addEventListener('mousedown', onDown);
+  canvas.addEventListener('mouseup', onUp);
 
   startBtn.addEventListener('click', () => { hideMsg(); start(); });
 
