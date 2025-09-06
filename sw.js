@@ -1,4 +1,4 @@
-const CACHE = 'kus-v1';
+const CACHE = 'kus-v2';
 const ASSETS = [
   './',
   './index.html',
