@@ -19,7 +19,7 @@
   #msg .card{background:rgba(0,0,0,.55);backdrop-filter:blur(8px);color:#fff;border-radius:16px;padding:18px 20px;text-align:center;max-width:min(92vw,520px)}
   #msg h1{margin:.2rem 0 0;font-size:1.25rem}
   #msg p{margin:.25rem 0 .5rem;opacity:.9}
-  #msg .btn{display:inline-block;margin-top:.25rem;background:#18c964;color:#03120a;font-weight:800;border-radius:12px;padding:.6rem 1rem}
+  #msg .btn{display:inline-block;margin-top:.25rem;background:#18c964;color:#03120a;font-weight:800;border-radius:12px;padding:.6rem 1rem;cursor:pointer}
   #msg small{display:block;opacity:.8;margin-top:.35rem}
 </style>
 </head>
@@ -102,7 +102,7 @@
   function rand(a,b){return Math.random()*(b-a)+a}
 
   function update(dt) {
-    const ay = G * dt * (touching ? 0.35 : 1);
+    const ay = G * dt;
     if (touching) {
       BIRD.vy += LIFT * dt;
     }
@@ -169,9 +169,8 @@
     ctx.ellipse(0,0,r*1.2,r,.0,0,Math.PI*2);
     ctx.fill();
     ctx.fillStyle = '#fab005';
-    const wf = flap ? 1.0 : 0.0;
     ctx.beginPath();
-    ctx.ellipse(-4, 2 - 6*wf, r*.7, r*.5, .2, 0, Math.PI*2);
+    ctx.ellipse(-4, 2, r*.7, r*.5, .2, 0, Math.PI*2);
     ctx.fill();
     ctx.fillStyle = '#000';
     ctx.beginPath();
@@ -224,32 +223,40 @@
   function start() {
     reset();
     hideMsg();
-    running = true;
-    tPrev = 0;
-    requestAnimationFrame(loop);
+    // 3 saniye geri sayım
+    let count = 3;
+    const timer = setInterval(() => {
+      showMsg('Başlıyor', count + '...');
+      count--;
+      if (count < 0) {
+        clearInterval(timer);
+        hideMsg();
+        running = true;
+        tPrev = 0;
+        requestAnimationFrame(loop);
+      }
+    }, 1000);
   }
 
   const onDown = (e) => { touching = true; BIRD.vy += LIFT * 0.35; e.preventDefault(); };
-  const onUp = (e) => { touching = false; if (!running) { hideMsg(); start(); } };
+  const onUp = (e) => { touching = false; if (!running) { start(); } };
   canvas.addEventListener('pointerdown', onDown);
   canvas.addEventListener('pointerup', onUp);
   canvas.addEventListener('pointercancel', onUp);
   canvas.addEventListener('pointerleave', (e)=>{ touching=false;});
 
-  // Dokunma ve fare için açıkça fallback ekle
+  // Ek dokunmatik ve fare fallback
   canvas.addEventListener('touchstart', onDown, {passive:false});
   canvas.addEventListener('touchend', onUp, {passive:false});
   canvas.addEventListener('mousedown', onDown);
   canvas.addEventListener('mouseup', onUp);
 
-  startBtn.addEventListener('click', () => { hideMsg(); start(); });
+  startBtn.addEventListener('click', () => { start(); });
 
-  // Space tuşu ile kontrol
   window.addEventListener('keydown', (e) => {
     if (e.code === 'Space') {
       e.preventDefault();
       if (!running) {
-        hideMsg();
         start();
       }
       BIRD.vy = LIFT * 0.5;
@@ -257,7 +264,7 @@
   });
 
   showMsg('Kuş Kaçış', 'Ekrana dokun veya Space tuşuna bas. Kuş yükselir, bırakınca alçalır. Engellere çarpma.');
-  // Service worker kaydı (PWA)
+
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
       navigator.serviceWorker.register('./sw.js', {scope: './'})
