@@ -1,280 +1,263 @@
-
 <!doctype html>
 <html lang="tr">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Labirent Oyunu</title>
-  <style>
-    :root{
-      --bg:#0b1220; --panel:#0f1724; --ink:#e6eef6; --accent:#00d4ff; --muted:#93a1b1;
-      --goal:#66ff99; --player:#ffd166; --wall:#263042;
-    }
-    html,body{height:100%;margin:0;background:radial-gradient(1200px 800px at 20% -10%,#13203a,transparent),
-                                   radial-gradient(1000px 600px at 120% 10%,#0e1a2f,transparent),var(--bg);
-      color:var(--ink);font-family:Inter,system-ui,Segoe UI,Roboto,Arial;
-    }
-    .wrap{max-width:980px;margin:0 auto;padding:16px;display:grid;gap:14px}
-    header{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap}
-    h1{font-size:20px;margin:0;color:#dce7ff;letter-spacing:.3px}
-    .controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-    .controls > *{background:var(--panel);border:1px solid #1b2436;color:var(--ink);border-radius:12px;padding:8px 10px}
-    select,button{cursor:pointer}
-    button.primary{background:linear-gradient(180deg,#12b7ff,#0aa3e6);border-color:#0a98d6;color:#032030;font-weight:600}
-    #hud{display:flex;gap:14px;align-items:center;color:var(--muted)}
-    .board{background:var(--panel);border:1px solid #19243a;border-radius:16px;box-shadow:0 10px 30px rgba(0,0,0,.35);padding:12px}
-    canvas{display:block;max-width:100%;height:auto;border-radius:12px;background:#0b1526}
-    .dpad{display:grid;grid-template-columns:48px 48px 48px;grid-template-rows:48px 48px 48px;gap:6px;margin:6px auto 0}
-    .dpad button{width:48px;height:48px;border-radius:12px;border:1px solid #1b2436;background:#132033;color:#cfe6ff;font-weight:700}
-    .dpad button:active{transform:translateY(1px)}
-    .note{color:var(--muted);font-size:13px}
-    a{color:#8dd3ff}
-  </style>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+<title>Kuş Kaçış – Mobil HTML5 Oyun</title>
+<link rel="manifest" href="./manifest.json">
+<meta name="theme-color" content="#0b0f19">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="apple-touch-icon" href="./icons/icon-192.png">
+<link rel="icon" href="./icons/icon-192.png">
+<style>
+  html,body{margin:0;height:100%;background:#0b0f19;color:#eaf2ff;font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial}
+  #wrap{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+  canvas{background:linear-gradient(#3a6ff0,#7fd8ff);touch-action:none}
+  #ui{position:fixed;top:0;left:0;right:0;display:flex;justify-content:space-between;align-items:center;padding:.6rem .8rem;pointer-events:none}
+  .pill{background:rgba(0,0,0,.35);backdrop-filter:blur(6px);color:#fff;border-radius:999px;padding:.25rem .6rem;font-weight:700}
+  #msg{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;}
+  #msg .card{background:rgba(0,0,0,.55);backdrop-filter:blur(8px);color:#fff;border-radius:16px;padding:18px 20px;text-align:center;max-width:min(92vw,520px)}
+  #msg h1{margin:.2rem 0 0;font-size:1.25rem}
+  #msg p{margin:.25rem 0 .5rem;opacity:.9}
+  #msg .btn{display:inline-block;margin-top:.25rem;background:#18c964;color:#03120a;font-weight:800;border-radius:12px;padding:.6rem 1rem}
+  #msg small{display:block;opacity:.8;margin-top:.35rem}
+</style>
 </head>
 <body>
-  <div class="wrap">
-    <header>
-      <h1>Labirent Oyunu</h1>
-      <div class="controls">
-        <label>Boyut
-          <select id="size">
-            <option value="15">15×15</option>
-            <option value="21" selected>21×21</option>
-            <option value="31">31×31</option>
-          </select>
-        </label>
-        <button id="new" class="primary">Yeni Labirent</button>
-        <div id="hud">
-          <span>⏱️ <b id="time">0.0</b>s</span>
-          <span>↩︎ Hamle: <b id="moves">0</b></span>
-        </div>
-      </div>
-    </header>
-
-    <div class="board">
-      <canvas id="cv" width="672" height="672"></canvas>
-    </div>
-
-    <div class="dpad" aria-label="yön tuşları">
-      <div></div>
-      <button data-dir="up">▲</button>
-      <div></div>
-      <button data-dir="left">◀</button>
-      <div></div>
-      <button data-dir="right">▶</button>
-      <div></div>
-      <button data-dir="down">▼</button>
-      <div></div>
-    </div>
-
-    <p class="note">Kontroller: Ok tuşları veya WASD. Mobil için yön düğmelerini kullan. Hedef yeşil kare.</p>
+<div id="wrap"><canvas id="game" width="480" height="800" aria-label="Kuş oyunu"></canvas></div>
+<div id="ui">
+  <span class="pill" id="score">0</span>
+  <span class="pill" id="best">En İyi: 0</span>
+</div>
+<div id="msg" hidden>
+  <div class="card">
+    <h1 id="title">Kuş Kaçış</h1>
+    <p id="subtitle">Ekrana dokun veya Space tuşuna bas. Kuş yükselir, bırakınca alçalır. Engellere çarpma.</p>
+    <a class="btn" id="start">Başlat</a>
+    <small>Tek dokunuş veya Space tuşu • Mobil uyumlu</small>
   </div>
-
+</div>
 <script>
-(function(){
-  const cv = document.getElementById('cv');
-  const ctx = cv.getContext('2d');
-  const movesEl = document.getElementById('moves');
-  const timeEl = document.getElementById('time');
-  const sizeSel = document.getElementById('size');
-  const newBtn = document.getElementById('new');
+(() => {
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const scoreEl = document.getElementById('score');
+  const bestEl = document.getElementById('best');
+  const msg = document.getElementById('msg');
+  const startBtn = document.getElementById('start');
+  const DPR = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
 
-  let rows = 21, cols = 21; // tek sayı olsun
-  let cell = Math.floor((Math.min(cv.width, cv.height)-2)/rows);
-  let maze, player, goal, moves, startTime, timerId;
+  function fit() {
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    canvas.style.width = w + 'px';
+    canvas.style.height = h + 'px';
+    canvas.width = Math.floor(w * DPR);
+    canvas.height = Math.floor(h * DPR);
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  }
+  window.addEventListener('resize', fit, {passive:true});
+  fit();
 
-  function makeGrid(r,c){
-    const grid=[];
-    for(let y=0;y<r;y++){
-      const row=[]; grid.push(row);
-      for(let x=0;x<c;x++) row.push({x,y, w:{n:1,e:1,s:1,w:1}, v:0});
+  let running = false;
+  let over = false;
+  let tPrev = 0;
+  let score = 0;
+  let best = Number(localStorage.getItem('bird_best') || 0);
+  bestEl.textContent = 'En İyi: ' + best;
+
+  const G = 1600;
+  const LIFT = -900;
+  const MAX_VY = 900;
+  const BIRD = { x: 0, y: 0, r: 16, vy: 0 };
+  const PIPES = [];
+  const GAP_MIN = 140;
+  const GAP_MAX = 200;
+  const PIPE_W = 64;
+  const PIPE_SPACING = 1.7;
+  const SPEED = 220;
+  let spawnTimer = 0;
+  let touching = false;
+
+  function reset() {
+    score = 0;
+    scoreEl.textContent = '0';
+    PIPES.length = 0;
+    spawnTimer = 0;
+    BIRD.x = Math.max(40, canvas.width / DPR * 0.22);
+    BIRD.y = canvas.height / DPR * 0.5;
+    BIRD.vy = 0;
+    over = false;
+  }
+
+  function spawnPipe() {
+    const H = canvas.height / DPR;
+    const gap = rand(GAP_MIN, GAP_MAX);
+    const margin = 40;
+    const topHeight = rand(margin, H - margin - gap);
+    const bottomY = topHeight + gap;
+    PIPES.push({ x: canvas.width / DPR + PIPE_W, top: topHeight, bottom: bottomY, w: PIPE_W, passed:false });
+  }
+
+  function rand(a,b){return Math.random()*(b-a)+a}
+
+  function update(dt) {
+    const ay = G * dt * (touching ? 0.35 : 1);
+    if (touching) {
+      BIRD.vy += LIFT * dt;
     }
-    return grid;
-  }
+    BIRD.vy += ay;
+    BIRD.vy = Math.max(-MAX_VY, Math.min(MAX_VY, BIRD.vy));
+    BIRD.y += BIRD.vy * dt;
 
-  function neighbors(g, x, y){
-    const list=[]; const r=g.length, c=g[0].length;
-    if(y>0 && !g[y-1][x].v) list.push([x,y-1,'n']);
-    if(x<c-1 && !g[y][x+1].v) list.push([x+1,y,'e']);
-    if(y<r-1 && !g[y+1][x].v) list.push([x,y+1,'s']);
-    if(x>0 && !g[y][x-1].v) list.push([x-1,y,'w']);
-    return list;
-  }
+    const H = canvas.height / DPR;
+    if (BIRD.y < BIRD.r) { BIRD.y = BIRD.r; BIRD.vy = 0; }
+    if (BIRD.y > H - BIRD.r) { BIRD.y = H - BIRD.r; over = true; }
 
-  function carve(a,b,dir){
-    if(dir==='n'){ a.w.n=0; b.w.s=0; }
-    if(dir==='e'){ a.w.e=0; b.w.w=0; }
-    if(dir==='s'){ a.w.s=0; b.w.n=0; }
-    if(dir==='w'){ a.w.w=0; b.w.e=0; }
-  }
+    spawnTimer -= dt;
+    if (spawnTimer <= 0) { spawnPipe(); spawnTimer = PIPE_SPACING; }
 
-  function shuffle(arr){ for(let i=arr.length-1;i>0;i--){const j=(Math.random()* (i+1))|0; [arr[i],arr[j]]=[arr[j],arr[i]];} return arr; }
-
-  function generate(r,c){
-    const g = makeGrid(r,c);
-    const st = g[0][0]; st.v=1; const stack=[st];
-    while(stack.length){
-      const cur = stack[stack.length-1];
-      const opts = shuffle(neighbors(g, cur.x, cur.y));
-      const next = opts.find(([nx,ny])=>true);
-      if(!next){ stack.pop(); continue; }
-      const [nx,ny,dir] = next;
-      const to = g[ny][nx];
-      to.v=1; carve(cur,to,dir); stack.push(to);
+    for (let i=PIPES.length-1;i>=0;i--) {
+      const p = PIPES[i];
+      p.x -= SPEED * dt;
+      if (!p.passed && p.x + p.w < BIRD.x - BIRD.r) {
+        p.passed = true; score++; scoreEl.textContent = String(score);
+      }
+      if (p.x + p.w < -10) PIPES.splice(i,1);
+      if (circleRectCollide(BIRD.x, BIRD.y, BIRD.r, p.x, 0, p.w, p.top) ||
+          circleRectCollide(BIRD.x, BIRD.y, BIRD.r, p.x, p.bottom, p.w, H - p.bottom)) {
+        over = true;
+      }
     }
-    return g;
   }
 
-  function reset(){
-    rows = cols = parseInt(sizeSel.value,10);
-    cell = Math.floor((Math.min(cv.width, cv.height)-2)/rows);
-    maze = generate(rows,cols);
-    player = {x:0,y:0};
-    goal = {x:cols-1, y:rows-1};
-    moves = 0; startTime = performance.now();
-    if(timerId) cancelAnimationFrame(timerId);
-    draw(); tick();
+  function circleRectCollide(cx, cy, r, rx, ry, rw, rh){
+    const nx = Math.max(rx, Math.min(cx, rx+rw));
+    const ny = Math.max(ry, Math.min(cy, ry+rh));
+    const dx = cx - nx, dy = cy - ny;
+    return dx*dx + dy*dy <= r*r;
   }
 
-  function tick(){
-    const dt = (performance.now()-startTime)/1000;
-    timeEl.textContent = dt.toFixed(1);
-    timerId = requestAnimationFrame(tick);
-  }
-
-  function draw(){
-    const W = cols*cell+2, H = rows*cell+2;
-    cv.width=W; cv.height=H;
+  function draw() {
+    const W = canvas.width / DPR, H = canvas.height / DPR;
     ctx.clearRect(0,0,W,H);
 
-    // grid background
-    ctx.fillStyle = '#0b1526';
-    ctx.fillRect(0,0,W,H);
+    ctx.fillStyle = '#2f9e44';
+    ctx.fillRect(0, H-80, W, 80);
 
-    // draw walls
-    ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--wall');
-    ctx.lineWidth = 3;
-    ctx.lineCap = 'square';
+    for (const p of PIPES) {
+      ctx.fillStyle = '#1e293b';
+      ctx.fillRect(p.x, 0, p.w, p.top);
+      ctx.fillRect(p.x, p.bottom, p.w, H - p.bottom);
+      ctx.fillStyle = '#334155';
+      ctx.fillRect(p.x, p.top-10, p.w, 10);
+      ctx.fillRect(p.x, p.bottom, p.w, 10);
+    }
+
+    drawBird(BIRD.x, BIRD.y, BIRD.r, touching);
+    ctx.fillStyle = '#174e25';
+    ctx.fillRect(0, H-80, W, 6);
+  }
+
+  function drawBird(x,y,r,flap) {
+    ctx.save();
+    ctx.translate(x,y);
+    const tilt = Math.max(-0.7, Math.min(0.7, BIRD.vy/500));
+    ctx.rotate(tilt);
+    ctx.fillStyle = '#ffd43b';
     ctx.beginPath();
-    for(let y=0;y<rows;y++){
-      for(let x=0;x<cols;x++){
-        const c=maze[y][x];
-        const sx = 1+x*cell, sy = 1+y*cell, ex = sx+cell, ey=sy+cell;
-        if(c.w.n) { ctx.moveTo(sx,sy); ctx.lineTo(ex,sy); }
-        if(c.w.e) { ctx.moveTo(ex,sy); ctx.lineTo(ex,ey); }
-        if(c.w.s) { ctx.moveTo(sx,ey); ctx.lineTo(ex,ey); }
-        if(c.w.w) { ctx.moveTo(sx,sy); ctx.lineTo(sx,ey); }
+    ctx.ellipse(0,0,r*1.2,r,.0,0,Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle = '#fab005';
+    const wf = flap ? 1.0 : 0.0;
+    ctx.beginPath();
+    ctx.ellipse(-4, 2 - 6*wf, r*.7, r*.5, .2, 0, Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle = '#000';
+    ctx.beginPath();
+    ctx.arc(r*0.6, -r*0.2, r*0.18, 0, Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.arc(r*0.62, -r*0.22, r*0.08, 0, Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle = '#ff6b6b';
+    ctx.beginPath();
+    ctx.moveTo(r*1.2, 0);
+    ctx.lineTo(r*1.6, r*0.1);
+    ctx.lineTo(r*1.2, r*0.2);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function loop(t) {
+    if (!running) return;
+    const now = t/1000;
+    const dt = Math.min(0.032, now - tPrev || 0.016);
+    tPrev = now;
+
+    update(dt);
+    draw();
+
+    if (over) {
+      running = false;
+      if (score > best) { best = score; localStorage.setItem('bird_best', String(best)); }
+      bestEl.textContent = 'En İyi: ' + best;
+      showMsg('Oyun Bitti', 'Skor: ' + score + ' • Devam için dokun veya Space');
+      return;
+    }
+    requestAnimationFrame(loop);
+  }
+
+  function showMsg(title, subtitle){
+    document.getElementById('title').textContent = title;
+    document.getElementById('subtitle').textContent = subtitle;
+    msg.hidden = false;
+    msg.style.display = 'flex';
+  }
+  function hideMsg(){
+    msg.hidden = true;
+    msg.style.display = 'none';
+  }
+
+  function start() {
+    reset();
+    hideMsg();
+    running = true;
+    tPrev = 0;
+    requestAnimationFrame(loop);
+  }
+
+  const onDown = (e) => { touching = true; e.preventDefault(); };
+  const onUp = (e) => { touching = false; if (!running) { hideMsg(); start(); } };
+  canvas.addEventListener('pointerdown', onDown);
+  canvas.addEventListener('pointerup', onUp);
+  canvas.addEventListener('pointercancel', onUp);
+  canvas.addEventListener('pointerleave', (e)=>{ touching=false;});
+
+  startBtn.addEventListener('click', () => { hideMsg(); start(); });
+
+  // Space tuşu ile kontrol
+  window.addEventListener('keydown', (e) => {
+    if (e.code === 'Space') {
+      e.preventDefault();
+      if (!running) {
+        hideMsg();
+        start();
       }
+      BIRD.vy = LIFT * 0.5;
     }
-    ctx.stroke();
-
-    // goal
-    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--goal');
-    drawCell(goal.x,goal.y, .65);
-
-    // player
-    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--player');
-    drawCell(player.x,player.y, .6, true);
-  }
-
-  function drawCell(x,y,scale=0.7,shadow=false){
-    const px = 1 + x*cell + (cell*(1-scale))/2;
-    const py = 1 + y*cell + (cell*(1-scale))/2;
-    const s  = cell*scale;
-    if(shadow){
-      ctx.fillStyle = 'rgba(0,0,0,.25)';
-      ctx.beginPath(); ctx.roundRect(px+1,py+2,s,s,6); ctx.fill();
-      ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--player');
-    }
-    ctx.beginPath(); ctx.roundRect(px,py,s,s,8); ctx.fill();
-  }
-
-  function canMove(dx,dy){
-    const {x,y} = player;
-    const c = maze[y][x];
-    if(dy===-1 && !c.w.n) return true;
-    if(dx=== 1 && !c.w.e) return true;
-    if(dy=== 1 && !c.w.s) return true;
-    if(dx===-1 && !c.w.w) return true;
-    return false;
-  }
-
-  function move(dx,dy){
-    if(!dx && !dy) return;
-    if(canMove(dx,dy)){
-      player.x += dx; player.y += dy; moves++; movesEl.textContent = moves;
-      draw();
-      if(player.x===goal.x && player.y===goal.y){
-        setTimeout(()=>win(), 50);
-      }
-    }
-  }
-
-  function win(){
-    cancelAnimationFrame(timerId);
-    const t = parseFloat(timeEl.textContent);
-    const msg = `Tebrikler! Süre: ${t}s | Hamle: ${moves}`;
-    // banner
-    ctx.fillStyle = 'rgba(0,0,0,.55)';
-    ctx.fillRect(0,cv.height/2-40,cv.width,80);
-    ctx.fillStyle = '#eaffff';
-    ctx.font = '700 20px Inter, system-ui, Segoe UI, Arial';
-    ctx.textAlign='center';
-    ctx.fillText(msg, cv.width/2, cv.height/2+7);
-  }
-
-  // keyboard
-  window.addEventListener('keydown',e=>{
-    const k=e.key.toLowerCase();
-    if(['arrowup','w'].includes(k)) { e.preventDefault(); move(0,-1); }
-    else if(['arrowdown','s'].includes(k)) { e.preventDefault(); move(0,1); }
-    else if(['arrowleft','a'].includes(k)) { e.preventDefault(); move(-1,0); }
-    else if(['arrowright','d'].includes(k)) { e.preventDefault(); move(1,0); }
-    else if(k==='r') reset();
   });
 
-  // dpad
-  document.querySelectorAll('.dpad button').forEach(b=>{
-    b.addEventListener('click',()=>{
-      const d=b.dataset.dir;
-      if(d==='up') move(0,-1);
-      if(d==='down') move(0,1);
-      if(d==='left') move(-1,0);
-      if(d==='right') move(1,0);
-    })
-  });
-
-  // touch swipe on canvas
-  let sx=0, sy=0;
-  cv.addEventListener('touchstart',e=>{const t=e.touches[0]; sx=t.clientX; sy=t.clientY;});
-  cv.addEventListener('touchend',e=>{
-    const t=e.changedTouches[0];
-    const dx=t.clientX-sx, dy=t.clientY-sy;
-    const ax=Math.abs(dx), ay=Math.abs(dy);
-    if(Math.max(ax,ay)<24) return;
-    if(ax>ay) move(Math.sign(dx),0); else move(0,Math.sign(dy));
-  });
-
-  // UI
-  newBtn.addEventListener('click', reset);
-  sizeSel.addEventListener('change', reset);
-
-  // polyfill for roundRect
-  if(!CanvasRenderingContext2D.prototype.roundRect){
-    CanvasRenderingContext2D.prototype.roundRect=function(x,y,w,h,r){
-      const rr = Math.min(r, Math.abs(w/2), Math.abs(h/2));
-      this.beginPath();
-      this.moveTo(x+rr,y);
-      this.arcTo(x+w,y,x+w,y+h,rr);
-      this.arcTo(x+w,y+h,x,y+h,rr);
-      this.arcTo(x,y+h,x,y,rr);
-      this.arcTo(x,y,x+w,y,rr);
-      this.closePath();
-      return this;
-    }
+  showMsg('Kuş Kaçış', 'Ekrana dokun veya Space tuşuna bas. Kuş yükselir, bırakınca alçalır. Engellere çarpma.');
+  // Service worker kaydı (PWA)
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./sw.js', {scope: './'})
+        .catch(err => console.error('SW register fail', err));
+    });
   }
-
-  reset();
 })();
 </script>
 </body>
